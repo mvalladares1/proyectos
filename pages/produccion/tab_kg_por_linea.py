@@ -633,6 +633,8 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
         sala_dia_hh = defaultdict(float)
         sala_dia_hh_efectiva = defaultdict(float)
         sala_dia_detenciones = defaultdict(float)
+        sala_dia_dotacion = defaultdict(float)
+        sala_dia_count = defaultdict(int)
         
         for orden in ordenes_filtradas:
             dt = orden.get('_inicio_dt')
@@ -644,10 +646,13 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
             hh = orden.get('hh', 0) or 0
             hh_ef = orden.get('hh_efectiva', 0) or 0
             detenciones = orden.get('detenciones', 0) or 0
+            dotacion = orden.get('dotacion', 0) or 0
             sala_dia_kg[dia_key] += kg
             sala_dia_hh[dia_key] += hh
             sala_dia_hh_efectiva[dia_key] += hh_ef
             sala_dia_detenciones[dia_key] += detenciones
+            sala_dia_dotacion[dia_key] += dotacion
+            sala_dia_count[dia_key] += 1
             if horas > 0:
                 sala_dia_horas[dia_key] += horas
         
@@ -657,11 +662,12 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
         dias_sala_sorted = sorted(sala_dia_kg.keys(), key=lambda d: datetime.strptime(d, '%d/%m/%y'))
         kg_hora_sala_vals = []       # kg_pt / duracion_horas
         kg_hora_ef_sala_vals = []    # kg_pt / (duracion - detenciones)
-        kg_hh_sala_vals = []         # kg_pt / hh
-        kg_hh_ef_sala_vals = []      # kg_pt / hh_efectiva
+        kg_hh_sala_vals = []         # KG/Hora / dotacion_promedio
+        kg_hh_ef_sala_vals = []      # KG/Hora Efectiva / dotacion_promedio
         kg_out_sala_vals = []        # kg_pt totales por día (barras)
         horas_proceso_sala_vals = [] # horas totales por día (tooltip)
         detenciones_sala_vals = []   # detenciones por día (tooltip)
+        dotacion_sala_vals = []      # dotación promedio por día (tooltip)
         
         for dia in dias_sala_sorted:
             horas = sala_dia_horas.get(dia, 0)
@@ -669,32 +675,40 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
             hh_ef = sala_dia_hh_efectiva.get(dia, 0)
             kg_total = sala_dia_kg[dia]
             detenciones = sala_dia_detenciones.get(dia, 0)
+            dot_total = sala_dia_dotacion.get(dia, 0)
+            n_ordenes = sala_dia_count.get(dia, 1)
+            dot_prom = dot_total / n_ordenes if n_ordenes > 0 else 0
             detenciones_sala_vals.append(round(detenciones, 1))
             kg_out_sala_vals.append(round(kg_total, 0))
             horas_proceso_sala_vals.append(round(horas, 1))
+            dotacion_sala_vals.append(round(dot_prom, 0))
             
             # KG/Hora
+            kg_hora = 0
             if horas > 0:
-                kg_hora_sala_vals.append(round(kg_total / horas, 0))
+                kg_hora = kg_total / horas
+                kg_hora_sala_vals.append(round(kg_hora, 0))
             else:
                 kg_hora_sala_vals.append(0)
             
             # KG/Hora Efectiva (descontando detenciones)
+            kg_hora_ef = 0
             horas_efectivas = max(horas - detenciones, 0)
             if horas_efectivas > 0:
-                kg_hora_ef_sala_vals.append(round(kg_total / horas_efectivas, 0))
+                kg_hora_ef = kg_total / horas_efectivas
+                kg_hora_ef_sala_vals.append(round(kg_hora_ef, 0))
             else:
                 kg_hora_ef_sala_vals.append(0)
             
-            # KG/HH
-            if hh > 0:
-                kg_hh_sala_vals.append(round(kg_total / hh, 1))
+            # KG/HH = KG/Hora ÷ Dotación
+            if dot_prom > 0 and kg_hora > 0:
+                kg_hh_sala_vals.append(round(kg_hora / dot_prom, 1))
             else:
                 kg_hh_sala_vals.append(0)
             
-            # KG/HH Efectivo
-            if hh_ef > 0:
-                kg_hh_ef_sala_vals.append(round(kg_total / hh_ef, 1))
+            # KG/HH Efectivo = KG/Hora Efectiva ÷ Dotación
+            if dot_prom > 0 and kg_hora_ef > 0:
+                kg_hh_ef_sala_vals.append(round(kg_hora_ef / dot_prom, 1))
             else:
                 kg_hh_ef_sala_vals.append(0)
         
@@ -707,8 +721,11 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
         prom_sala = total_kg_sala / total_horas_sala if total_horas_sala > 0 else 0
         horas_ef_sala = max(total_horas_sala - total_det_sala, 0)
         prom_sala_efectiva = total_kg_sala / horas_ef_sala if horas_ef_sala > 0 else 0
-        prom_kg_hh = total_kg_sala / total_hh_sala if total_hh_sala > 0 else 0
-        prom_kg_hh_ef = total_kg_sala / total_hh_ef_sala if total_hh_ef_sala > 0 else 0
+        total_dot_sala = sum(sala_dia_dotacion.values())
+        total_count_sala = sum(sala_dia_count.values())
+        dot_prom_global = total_dot_sala / total_count_sala if total_count_sala > 0 else 0
+        prom_kg_hh = prom_sala / dot_prom_global if dot_prom_global > 0 else 0
+        prom_kg_hh_ef = prom_sala_efectiva / dot_prom_global if dot_prom_global > 0 else 0
         turno_label = f" ({filtro_turno_sala})" if filtro_turno_sala != "Todos" else ""
         color_sala = colores_sala[idx % len(colores_sala)]
         
@@ -717,7 +734,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
             var res = '<b>' + params[0].axisValue + '</b><br/>';
             for(var i=0; i<params.length; i++){
                 var p = params[i];
-                if(p.seriesName === 'Horas Proceso' || p.seriesName === '_det'){
+                if(p.seriesName === 'Horas Proceso' || p.seriesName === '_det' || p.seriesName === '_dot'){
                     continue;
                 }
                 var marker = p.marker || '';
@@ -737,6 +754,9 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                 }
                 if(params[i].seriesName === '_det'){
                     res += '🛑 Detenciones: <b>' + params[i].value + ' hrs</b><br/>';
+                }
+                if(params[i].seriesName === '_dot'){
+                    res += '👥 Dotación: <b>' + params[i].value + '</b><br/>';
                 }
             }
             return res;
@@ -965,6 +985,17 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                     "type": "line",
                     "yAxisIndex": 0,
                     "data": detenciones_sala_vals,
+                    "showSymbol": False,
+                    "lineStyle": {"width": 0, "opacity": 0},
+                    "itemStyle": {"opacity": 0},
+                    "tooltip": {"show": True}
+                },
+                # Serie oculta: Dotación promedio (para tooltip)
+                {
+                    "name": "_dot",
+                    "type": "line",
+                    "yAxisIndex": 0,
+                    "data": dotacion_sala_vals,
                     "showSymbol": False,
                     "lineStyle": {"width": 0, "opacity": 0},
                     "itemStyle": {"opacity": 0},
