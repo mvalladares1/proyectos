@@ -737,7 +737,11 @@ async def listar_ocs_sin_facturar(
     page_size: int = 50
 ):
     """
-    Lista OCs confirmadas sin facturar (candidatas a distribuir).
+    Lista OCs confirmadas con saldo pendiente por facturar.
+    
+    Incluye:
+    - OCs sin ninguna factura
+    - OCs con facturas parciales (muestra saldo pendiente)
     
     Args:
         username: Usuario Odoo
@@ -748,23 +752,20 @@ async def listar_ocs_sin_facturar(
         page_size: Tamaño de página (máx 100)
         
     Returns:
-        Lista de OCs con sus datos básicos y si tienen distribución
+        Lista de OCs con sus datos básicos, monto facturado y pendiente
     """
     try:
         service = FlujoCajaService(username=username, password=password)
         
-        # Consultar OCs sin facturar
+        # Consultar OCs confirmadas (con o sin facturas)
         campos_oc = [
             'id', 'name', 'partner_id', 'amount_total', 'date_order',
-            'date_planned', 'currency_id', 'x_studio_fecha_de'
+            'date_planned', 'currency_id', 'x_studio_fecha_de', 'invoice_ids'
         ]
         
         ocs = service.odoo.search_read(
             'purchase.order',
-            [
-                ['state', '=', 'purchase'],
-                ['invoice_ids', '=', False]
-            ],
+            [['state', '=', 'purchase']],
             campos_oc,
             limit=10000
         )
@@ -773,8 +774,50 @@ async def listar_ocs_sin_facturar(
         oc_ids = [oc['id'] for oc in ocs]
         distribuciones = distribuciones_oc_service.obtener_distribuciones_por_ids(oc_ids)
         
+        # Recolectar IDs de facturas para consulta batch
+        all_invoice_ids = []
+        for oc in ocs:
+            invoice_ids = oc.get('invoice_ids', [])
+            if invoice_ids:
+                all_invoice_ids.extend(invoice_ids)
+        
+        # Consultar facturas en batch (si hay)
+        facturas_por_id = {}
+        if all_invoice_ids:
+            facturas = service.odoo.search_read(
+                'account.move',
+                [['id', 'in', all_invoice_ids]],
+                ['id', 'amount_total', 'currency_id', 'state'],
+                limit=len(all_invoice_ids)
+            )
+            for f in facturas:
+                facturas_por_id[f['id']] = f
+        
         # Formatear resultado
         from backend.services.currency_service import CurrencyService
+        
+        def convertir_moneda(amount: float, currency_name: str) -> tuple:
+            """Convierte a CLP y retorna (monto_clp, fue_convertido)"""
+            if not currency_name:
+                return amount, False
+            
+            currency_upper = str(currency_name).upper()
+            
+            # CLF es código ISO de UF - si se usa incorrectamente como CLP, no convertir
+            # CLF real debería convertirse, pero algunos sistemas lo usan mal como CLP
+            if currency_upper == 'CLF':
+                # Si el monto es muy grande (>100000), probablemente es CLP mal etiquetado
+                if amount > 100000:
+                    return amount, False  # Asumir que ya es CLP
+                else:
+                    return CurrencyService.convert_uf_to_clp(amount), True
+            
+            if 'USD' in currency_upper:
+                return CurrencyService.convert_usd_to_clp(amount), True
+            elif 'UF' in currency_upper:
+                return CurrencyService.convert_uf_to_clp(amount), True
+            
+            return amount, False
         
         resultado = []
         for oc in ocs:
@@ -782,25 +825,37 @@ async def listar_ocs_sin_facturar(
             partner_id = partner_data[0] if isinstance(partner_data, (list, tuple)) else 0
             partner_name = partner_data[1] if isinstance(partner_data, (list, tuple)) and len(partner_data) > 1 else 'Sin proveedor'
             
+            # Monto total de la OC
             amount_total_original = float(oc.get('amount_total') or 0)
-            amount_total = amount_total_original
-            
-            # Convertir moneda si es necesario
             currency_data = oc.get('currency_id')
             currency_name = currency_data[1] if isinstance(currency_data, (list, tuple)) and len(currency_data) > 1 else 'CLP'
-            convertido = False
-            if currency_name:
-                currency_upper = str(currency_name).upper()
-                if 'USD' in currency_upper:
-                    amount_total = CurrencyService.convert_usd_to_clp(amount_total)
-                    convertido = True
-                elif 'UF' in currency_upper or 'CLF' in currency_upper:
-                    amount_total = CurrencyService.convert_uf_to_clp(amount_total)
-                    convertido = True
             
-            # Log para debugging de montos grandes o conversiones
-            if convertido and amount_total > 1_000_000_000:
-                print(f"[DEBUG OC] {oc.get('name')}: original={amount_total_original:,.2f} {currency_name} -> convertido={amount_total:,.0f} CLP")
+            amount_total, convertido = convertir_moneda(amount_total_original, currency_name)
+            
+            # Calcular monto facturado
+            invoice_ids = oc.get('invoice_ids', [])
+            monto_facturado = 0.0
+            num_facturas = 0
+            
+            for inv_id in invoice_ids:
+                factura = facturas_por_id.get(inv_id)
+                if factura:
+                    # Solo contar facturas no canceladas
+                    if factura.get('state') != 'cancel':
+                        inv_amount = float(factura.get('amount_total') or 0)
+                        inv_currency = factura.get('currency_id')
+                        inv_currency_name = inv_currency[1] if isinstance(inv_currency, (list, tuple)) and len(inv_currency) > 1 else 'CLP'
+                        
+                        inv_amount_clp, _ = convertir_moneda(inv_amount, inv_currency_name)
+                        monto_facturado += inv_amount_clp
+                        num_facturas += 1
+            
+            # Calcular pendiente
+            monto_pendiente = amount_total - monto_facturado
+            
+            # Solo incluir si hay saldo pendiente (tolerancia de $100 por redondeos)
+            if monto_pendiente < 100:
+                continue
             
             # Determinar fecha proyectada actual
             fecha_pago = oc.get('x_studio_fecha_de')
@@ -832,6 +887,10 @@ async def listar_ocs_sin_facturar(
                 "proveedor": partner_name,
                 "proveedor_id": partner_id,
                 "monto_total": amount_total,
+                "monto_facturado": monto_facturado,
+                "monto_pendiente": monto_pendiente,
+                "num_facturas": num_facturas,
+                "tiene_facturas_parciales": num_facturas > 0 and monto_pendiente > 0,
                 "moneda_original": currency_name,
                 "fecha_oc": str(oc.get('date_order', ''))[:10] if oc.get('date_order') else None,
                 "fecha_proyectada": fecha_proyectada,
@@ -855,13 +914,13 @@ async def listar_ocs_sin_facturar(
         elif filter_distribucion == 'no':
             resultado = [r for r in resultado if not r['tiene_distribucion']]
         
-        # Ordenar: primero las que no tienen distribución, luego por urgencia y monto
+        # Ordenar: primero las que no tienen distribución, luego por urgencia y monto pendiente
         def sort_key(x):
             urgencia_order = {'vencida': 0, 'urgente': 1, 'proxima': 2, 'normal': 3}
             return (
                 x['tiene_distribucion'],  # False primero
                 urgencia_order.get(x['urgencia'], 3),
-                -x['monto_total']
+                -x['monto_pendiente']  # Por monto pendiente, no total
             )
         resultado.sort(key=sort_key)
         
@@ -869,8 +928,12 @@ async def listar_ocs_sin_facturar(
         total = len(resultado)
         con_distribucion = sum(1 for r in resultado if r['tiene_distribucion'])
         sin_distribucion = sum(1 for r in resultado if not r['tiene_distribucion'])
-        monto_total = sum(r['monto_total'] for r in resultado)
-        monto_distribuido = sum(r['monto_total'] for r in resultado if r['tiene_distribucion'])
+        con_facturas_parciales = sum(1 for r in resultado if r['tiene_facturas_parciales'])
+        
+        # Montos totales (pendientes)
+        monto_pendiente_total = sum(r['monto_pendiente'] for r in resultado)
+        monto_facturado_total = sum(r['monto_facturado'] for r in resultado)
+        monto_distribuido = sum(r['monto_pendiente'] for r in resultado if r['tiene_distribucion'])
         
         # Paginación
         page_size = min(page_size, 100)  # Máximo 100
@@ -882,7 +945,9 @@ async def listar_ocs_sin_facturar(
             "total": total,
             "con_distribucion": con_distribucion,
             "sin_distribucion": sin_distribucion,
-            "monto_total": monto_total,
+            "con_facturas_parciales": con_facturas_parciales,
+            "monto_total": monto_pendiente_total,  # Ahora es el total PENDIENTE
+            "monto_facturado_total": monto_facturado_total,
             "monto_distribuido": monto_distribuido,
             "page": page,
             "page_size": page_size,
