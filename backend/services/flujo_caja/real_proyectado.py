@@ -634,15 +634,18 @@ class RealProyectadoCalculator:
                 # Verificar si existe distribución manual para esta OC
                 if oc_id in distribuciones_manuales:
                     # Usar distribución manual: múltiples fechas/montos
-                    # Nota: La distribución puede estar desactualizada si cambió el monto pendiente
+                    # Verificar si requiere reajuste (monto cambió más del 1%)
                     monto_distribucion_guardada = sum(float(d.get('monto', 0)) for d in distribuciones_manuales[oc_id])
                     
-                    # Escalar proporcionalmente si el monto pendiente cambió
-                    factor_escala = monto_pendiente / monto_distribucion_guardada if monto_distribucion_guardada > 0 else 1.0
+                    if monto_distribucion_guardada > 0:
+                        diferencia_pct = abs(monto_pendiente - monto_distribucion_guardada) / monto_distribucion_guardada
+                        if diferencia_pct > 0.01:
+                            # Monto cambió más del 1% - NO mostrar en FC hasta que se reajuste
+                            continue
                     
                     for dist in distribuciones_manuales[oc_id]:
                         fecha_dist = dist.get('fecha', '')
-                        monto_dist = float(dist.get('monto', 0)) * factor_escala  # Escalar monto
+                        monto_dist = float(dist.get('monto', 0))  # Usar monto exacto guardado
                         
                         if not fecha_dist or monto_dist == 0:
                             continue
