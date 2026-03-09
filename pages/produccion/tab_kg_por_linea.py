@@ -122,7 +122,8 @@ def estado_label(state: str) -> str:
 
 
 def _build_chart_kg_dia_sala(mos_list: List[Dict], title: str = "⚖️ KG Producidos por Día / Sala",
-                             subtitle: str = "Kilogramos de producto terminado desglosados por día y sala") -> Optional[dict]:
+                             subtitle: str = "Kilogramos de producto terminado desglosados por día y sala",
+                             agrupacion: str = "📅 Día") -> Optional[dict]:
     """Construye opciones ECharts para gráfico KG por día/sala. Retorna None si no hay datos."""
     if not mos_list:
         return None
@@ -143,7 +144,11 @@ def _build_chart_kg_dia_sala(mos_list: List[Dict], title: str = "⚖️ KG Produ
         dt = mo.get('_inicio_dt')
         if not dt:
             continue
-        dia_key = dt.strftime('%d/%m/%y')
+        if agrupacion == "📆 Semana":
+            iso_y, iso_w, _ = dt.isocalendar()
+            dia_key = f"S{iso_w:02d}/{iso_y}"
+        else:
+            dia_key = dt.strftime('%d/%m/%y')
         kg = mo.get('kg_pt', 0) or 0
         dia_sala_kg[dia_key][sala] += kg
         
@@ -155,7 +160,10 @@ def _build_chart_kg_dia_sala(mos_list: List[Dict], title: str = "⚖️ KG Produ
     if not dia_sala_kg:
         return None
 
-    dias_sorted = sorted(dia_sala_kg.keys(), key=lambda d: datetime.strptime(d, '%d/%m/%y'))
+    if agrupacion == "📆 Semana":
+        dias_sorted = sorted(dia_sala_kg.keys(), key=lambda d: (int(d.split('/')[1]), int(d.split('/')[0][1:])))
+    else:
+        dias_sorted = sorted(dia_sala_kg.keys(), key=lambda d: datetime.strptime(d, '%d/%m/%y'))
     salas_sorted = sorted(todas_salas_set)
     color_map = {sala: colores_paleta[i % len(colores_paleta)] for i, sala in enumerate(salas_sorted)}
     
@@ -311,9 +319,9 @@ def _build_chart_kg_dia_sala(mos_list: List[Dict], title: str = "⚖️ KG Produ
     return options, salas_sorted
 
 
-def _render_grafico_salas(mos_filtradas: List[Dict], salas_data: Dict[str, Dict]):
+def _render_grafico_salas(mos_filtradas: List[Dict], salas_data: Dict[str, Dict], agrupacion: str = "📅 Día"):
     """Gráfico de KG desglosado por día y sala."""
-    result = _build_chart_kg_dia_sala(mos_filtradas)
+    result = _build_chart_kg_dia_sala(mos_filtradas, agrupacion=agrupacion)
     if not result:
         return
     options, salas_sorted = result
@@ -321,7 +329,7 @@ def _render_grafico_salas(mos_filtradas: List[Dict], salas_data: Dict[str, Dict]
     st_echarts(options=options, height=f"{altura}px")
 
 
-def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Dict]):
+def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Dict], agrupacion: str = "📅 Día"):
     """Renderiza gráficos dedicados de KG/H: uno general por día y uno por cada sala."""
     if not mos_filtradas:
         return
@@ -351,7 +359,11 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
         dt = mo.get('_inicio_dt')
         if not dt:
             continue
-        dia_key = dt.strftime('%d/%m/%y')
+        if agrupacion == "📆 Semana":
+            iso_y, iso_w, _ = dt.isocalendar()
+            dia_key = f"S{iso_w:02d}/{iso_y}"
+        else:
+            dia_key = dt.strftime('%d/%m/%y')
         turno = _clasificar_turno(dt, mo.get('_fin_dt'))
         kg = mo.get('kg_pt', 0) or 0
         horas = mo.get('duracion_horas', 0) or 0
@@ -371,7 +383,10 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                 st.info(f"No hay datos para Turno {turno_name}")
                 continue
             
-            dias_sorted = sorted(td['dia_kg'].keys(), key=lambda d: datetime.strptime(d, '%d/%m/%y'))
+            if agrupacion == "📆 Semana":
+                dias_sorted = sorted(td['dia_kg'].keys(), key=lambda d: (int(d.split('/')[1]), int(d.split('/')[0][1:])))
+            else:
+                dias_sorted = sorted(td['dia_kg'].keys(), key=lambda d: datetime.strptime(d, '%d/%m/%y'))
             kg_hora_vals = []
             kg_hora_ef_vals = []
             detenciones_vals = []
@@ -601,16 +616,6 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
         key="filtro_turno_sala"
     )
     
-    col_agrup_a, col_agrup_b = st.columns([1, 3])
-    with col_agrup_a:
-        agrupacion_sala = st.radio(
-            "Agrupar por",
-            ["📅 Día", "📆 Semana"],
-            index=0,
-            key="agrupacion_sala",
-            horizontal=True
-        )
-    
     colores_sala = [
         '#2196F3', '#F44336', '#4CAF50', '#FFC107', '#9C27B0',
         '#FF9800', '#00BCD4', '#E91E63', '#009688', '#673AB7',
@@ -650,7 +655,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
             dt = orden.get('_inicio_dt')
             if not dt:
                 continue
-            if agrupacion_sala == "📆 Semana":
+            if agrupacion == "📆 Semana":
                 iso_y, iso_w, _ = dt.isocalendar()
                 dia_key = f"S{iso_w:02d}/{iso_y}"
             else:
@@ -673,7 +678,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
         if not sala_dia_kg:
             continue
         
-        if agrupacion_sala == "📆 Semana":
+        if agrupacion == "📆 Semana":
             dias_sala_sorted = sorted(sala_dia_kg.keys(), key=lambda d: (int(d.split('/')[1]), int(d.split('/')[0][1:])))
         else:
             dias_sala_sorted = sorted(sala_dia_kg.keys(), key=lambda d: datetime.strptime(d, '%d/%m/%y'))
@@ -1510,11 +1515,20 @@ def render(username: str = None, password: str = None):
 
     st.markdown("---")
 
+    # === AGRUPACIÓN DÍA / SEMANA ===
+    agrupacion = st.radio(
+        "Agrupar gráficos por",
+        ["📅 Día", "📆 Semana"],
+        index=0,
+        key="agrupacion_graficos",
+        horizontal=True
+    )
+
     # === GRÁFICO KG POR DÍA/SALA ===
-    _render_grafico_salas(mos_filtradas, salas_data)
+    _render_grafico_salas(mos_filtradas, salas_data, agrupacion=agrupacion)
     
     # === GRÁFICOS DE KG/HORA ===
-    _render_graficos_kg_hora(mos_filtradas, salas_data)
+    _render_graficos_kg_hora(mos_filtradas, salas_data, agrupacion=agrupacion)
 
     # === COMPARACIÓN TURNO DÍA VS TURNO TARDE (BARRAS) ===
     _render_comparacion_turnos(mos_filtradas)
