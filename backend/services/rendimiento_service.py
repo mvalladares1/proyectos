@@ -959,7 +959,7 @@ class RendimientoService:
                 sala, sala_tipo = self._classify_sala(sala_raw, product_name)
                 
                 # HH
-                hh = mo.get('x_studio_hh_efectiva') or 0
+                hh = mo.get('x_studio_hh') or 0
                 if isinstance(hh, (int, float)):
                     total_hh += hh
                 
