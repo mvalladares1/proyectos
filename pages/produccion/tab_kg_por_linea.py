@@ -630,6 +630,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
         # Agrupar por día para esta sala
         sala_dia_kg = defaultdict(float)
         sala_dia_horas = defaultdict(float)
+        sala_dia_hh = defaultdict(float)
         sala_dia_hh_efectiva = defaultdict(float)
         sala_dia_detenciones = defaultdict(float)
         
@@ -640,9 +641,11 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
             dia_key = dt.strftime('%d/%m/%y')
             kg = orden.get('kg_pt', 0) or 0
             horas = orden.get('duracion_horas', 0) or 0
+            hh = orden.get('hh', 0) or 0
             hh_ef = orden.get('hh_efectiva', 0) or 0
             detenciones = orden.get('detenciones', 0) or 0
             sala_dia_kg[dia_key] += kg
+            sala_dia_hh[dia_key] += hh
             sala_dia_hh_efectiva[dia_key] += hh_ef
             sala_dia_detenciones[dia_key] += detenciones
             if horas > 0:
@@ -652,39 +655,92 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
             continue
         
         dias_sala_sorted = sorted(sala_dia_kg.keys(), key=lambda d: datetime.strptime(d, '%d/%m/%y'))
-        kg_hora_efectiva_sala_vals = []  # kg_pt / duracion_horas
-        kg_hh_efectiva_sala_vals = []    # kg_pt / hh_efectiva
-        detenciones_sala_vals = []  # detenciones por día para tooltip
+        kg_hora_sala_vals = []       # kg_pt / duracion_horas
+        kg_hora_ef_sala_vals = []    # kg_pt / (duracion - detenciones)
+        kg_hh_sala_vals = []         # kg_pt / hh
+        kg_hh_ef_sala_vals = []      # kg_pt / hh_efectiva
+        kg_out_sala_vals = []        # kg_pt totales por día (barras)
+        horas_proceso_sala_vals = [] # horas totales por día (tooltip)
+        detenciones_sala_vals = []   # detenciones por día (tooltip)
         
         for dia in dias_sala_sorted:
             horas = sala_dia_horas.get(dia, 0)
+            hh = sala_dia_hh.get(dia, 0)
             hh_ef = sala_dia_hh_efectiva.get(dia, 0)
             kg_total = sala_dia_kg[dia]
             detenciones = sala_dia_detenciones.get(dia, 0)
             detenciones_sala_vals.append(round(detenciones, 1))
+            kg_out_sala_vals.append(round(kg_total, 0))
+            horas_proceso_sala_vals.append(round(horas, 1))
             
             # KG/Hora
             if horas > 0:
-                kg_hora_efectiva_sala_vals.append(round(kg_total / horas, 0))
+                kg_hora_sala_vals.append(round(kg_total / horas, 0))
             else:
-                kg_hora_efectiva_sala_vals.append(0)
+                kg_hora_sala_vals.append(0)
             
             # KG/Hora Efectiva (descontando detenciones)
             horas_efectivas = max(horas - detenciones, 0)
             if horas_efectivas > 0:
-                kg_hh_efectiva_sala_vals.append(round(kg_total / horas_efectivas, 0))
+                kg_hora_ef_sala_vals.append(round(kg_total / horas_efectivas, 0))
             else:
-                kg_hh_efectiva_sala_vals.append(0)
+                kg_hora_ef_sala_vals.append(0)
+            
+            # KG/HH
+            if hh > 0:
+                kg_hh_sala_vals.append(round(kg_total / hh, 1))
+            else:
+                kg_hh_sala_vals.append(0)
+            
+            # KG/HH Efectivo
+            if hh_ef > 0:
+                kg_hh_ef_sala_vals.append(round(kg_total / hh_ef, 1))
+            else:
+                kg_hh_ef_sala_vals.append(0)
         
         # Promedios basados en órdenes filtradas
         total_kg_sala = sum(sala_dia_kg.values())
         total_horas_sala = sum(sala_dia_horas.values())
+        total_hh_sala = sum(sala_dia_hh.values())
+        total_hh_ef_sala = sum(sala_dia_hh_efectiva.values())
         total_det_sala = sum(sala_dia_detenciones.values())
         prom_sala = total_kg_sala / total_horas_sala if total_horas_sala > 0 else 0
         horas_ef_sala = max(total_horas_sala - total_det_sala, 0)
         prom_sala_efectiva = total_kg_sala / horas_ef_sala if horas_ef_sala > 0 else 0
+        prom_kg_hh = total_kg_sala / total_hh_sala if total_hh_sala > 0 else 0
+        prom_kg_hh_ef = total_kg_sala / total_hh_ef_sala if total_hh_ef_sala > 0 else 0
         turno_label = f" ({filtro_turno_sala})" if filtro_turno_sala != "Todos" else ""
         color_sala = colores_sala[idx % len(colores_sala)]
+        
+        # Tooltip custom con Horas Totales
+        tooltip_formatter = JsCode("""function(params){
+            var res = '<b>' + params[0].axisValue + '</b><br/>';
+            for(var i=0; i<params.length; i++){
+                var p = params[i];
+                if(p.seriesName === 'Horas Proceso' || p.seriesName === '_det'){
+                    continue;
+                }
+                var marker = p.marker || '';
+                var val = p.value;
+                if(p.seriesName === 'KG Output'){
+                    res += marker + p.seriesName + ': <b>' + Math.round(val).toLocaleString() + ' kg</b><br/>';
+                } else if(p.seriesName === 'KG/HH' || p.seriesName === 'KG/HH Efectivo'){
+                    res += marker + p.seriesName + ': <b>' + val.toFixed(1) + '</b><br/>';
+                } else {
+                    res += marker + p.seriesName + ': <b>' + Math.round(val).toLocaleString() + '</b><br/>';
+                }
+            }
+            // Buscar Horas Proceso y Detenciones en las series ocultas
+            for(var i=0; i<params.length; i++){
+                if(params[i].seriesName === 'Horas Proceso'){
+                    res += '⏱️ Horas Proceso: <b>' + params[i].value + ' hrs</b><br/>';
+                }
+                if(params[i].seriesName === '_det'){
+                    res += '🛑 Detenciones: <b>' + params[i].value + ' hrs</b><br/>';
+                }
+            }
+            return res;
+        }""").js_code
         
         opts_sala = {
             "backgroundColor": "#ffffff",
@@ -703,16 +759,17 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                 "borderWidth": 2,
                 "borderRadius": 8,
                 "textStyle": {"color": "#333", "fontSize": 12},
-                "extraCssText": "box-shadow: 0 2px 12px rgba(0,0,0,0.15);"
+                "extraCssText": "box-shadow: 0 2px 12px rgba(0,0,0,0.15);",
+                "formatter": tooltip_formatter
             },
             "legend": {
-                "data": ["KG/Hora", "KG/Hora Efectiva"],
+                "data": ["KG Output", "KG/Hora", "KG/Hora Efectiva", "KG/HH", "KG/HH Efectivo"],
                 "bottom": 0,
                 "textStyle": {"color": "#666", "fontSize": 10},
                 "itemGap": 12
             },
             "grid": {
-                "left": "3%", "right": "5%",
+                "left": "3%", "right": "8%",
                 "bottom": "15%", "top": "18%",
                 "containLabel": True
             },
@@ -726,20 +783,52 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                 "axisLine": {"lineStyle": {"color": "#ddd"}},
                 "axisTick": {"show": False}
             },
-            "yAxis": {
-                "type": "value",
-                "name": "⚡ KG/Hora",
-                "nameTextStyle": {"color": "#7FA8C9", "fontSize": 13, "fontWeight": "600"},
-                "axisLabel": {"color": "#666", "fontSize": 11},
-                "splitLine": {"lineStyle": {"color": "#f0f0f0", "type": "solid"}},
-                "axisLine": {"show": False}
-            },
+            "yAxis": [
+                {
+                    "type": "value",
+                    "name": "⚡ KG/Hora",
+                    "nameTextStyle": {"color": "#7FA8C9", "fontSize": 13, "fontWeight": "600"},
+                    "axisLabel": {"color": "#666", "fontSize": 11},
+                    "splitLine": {"lineStyle": {"color": "#f0f0f0", "type": "solid"}},
+                    "axisLine": {"show": False}
+                },
+                {
+                    "type": "value",
+                    "name": "📦 KG Output",
+                    "nameTextStyle": {"color": "#aaa", "fontSize": 11},
+                    "axisLabel": {"color": "#aaa", "fontSize": 10, "formatter": JsCode("function(v){return (v/1000).toFixed(0)+'k'}").js_code},
+                    "splitLine": {"show": False},
+                    "axisLine": {"show": False},
+                    "position": "right"
+                }
+            ],
             "series": [
+                # Barras de KG Output (por detrás, z=0)
+                {
+                    "name": "KG Output",
+                    "type": "bar",
+                    "yAxisIndex": 1,
+                    "data": kg_out_sala_vals,
+                    "barWidth": "40%",
+                    "itemStyle": {
+                        "color": {
+                            "type": "linear",
+                            "x": 0, "y": 0, "x2": 0, "y2": 1,
+                            "colorStops": [
+                                {"offset": 0, "color": "rgba(76, 175, 80, 0.35)"},
+                                {"offset": 1, "color": "rgba(76, 175, 80, 0.08)"}
+                            ]
+                        },
+                        "borderRadius": [4, 4, 0, 0]
+                    },
+                    "z": 0
+                },
+                # Línea KG/Hora
                 {
                     "name": "KG/Hora",
                     "type": "line",
                     "yAxisIndex": 0,
-                    "data": kg_hora_efectiva_sala_vals,
+                    "data": kg_hora_sala_vals,
                     "smooth": True,
                     "symbolSize": 8,
                     "symbol": "circle",
@@ -759,7 +848,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                             "type": "linear",
                             "x": 0, "y": 0, "x2": 0, "y2": 1,
                             "colorStops": [
-                                {"offset": 0, "color": "rgba(107, 163, 196, 0.25)"},
+                                {"offset": 0, "color": "rgba(107, 163, 196, 0.18)"},
                                 {"offset": 1, "color": "rgba(107, 163, 196, 0.02)"}
                             ]
                         }
@@ -774,11 +863,12 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                     },
                     "z": 2
                 },
+                # Línea KG/Hora Efectiva
                 {
                     "name": "KG/Hora Efectiva",
                     "type": "line",
                     "yAxisIndex": 0,
-                    "data": kg_hh_efectiva_sala_vals,
+                    "data": kg_hora_ef_sala_vals,
                     "smooth": True,
                     "symbolSize": 8,
                     "symbol": "diamond",
@@ -799,7 +889,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                             "type": "linear",
                             "x": 0, "y": 0, "x2": 0, "y2": 1,
                             "colorStops": [
-                                {"offset": 0, "color": "rgba(201, 153, 125, 0.25)"},
+                                {"offset": 0, "color": "rgba(201, 153, 125, 0.18)"},
                                 {"offset": 1, "color": "rgba(201, 153, 125, 0.02)"}
                             ]
                         }
@@ -814,8 +904,64 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
                     },
                     "z": 3
                 },
+                # Línea KG/HH
                 {
-                    "name": "Detenciones",
+                    "name": "KG/HH",
+                    "type": "line",
+                    "yAxisIndex": 0,
+                    "data": kg_hh_sala_vals,
+                    "smooth": True,
+                    "symbolSize": 6,
+                    "symbol": "triangle",
+                    "itemStyle": {
+                        "color": "#7E57C2",
+                        "borderWidth": 2,
+                        "borderColor": "#fff"
+                    },
+                    "lineStyle": {
+                        "color": "#7E57C2",
+                        "width": 2.5,
+                        "type": "dashed"
+                    },
+                    "label": {"show": False},
+                    "z": 4
+                },
+                # Línea KG/HH Efectivo
+                {
+                    "name": "KG/HH Efectivo",
+                    "type": "line",
+                    "yAxisIndex": 0,
+                    "data": kg_hh_ef_sala_vals,
+                    "smooth": True,
+                    "symbolSize": 6,
+                    "symbol": "rect",
+                    "itemStyle": {
+                        "color": "#26A69A",
+                        "borderWidth": 2,
+                        "borderColor": "#fff"
+                    },
+                    "lineStyle": {
+                        "color": "#26A69A",
+                        "width": 2.5,
+                        "type": "dashed"
+                    },
+                    "label": {"show": False},
+                    "z": 4
+                },
+                # Serie oculta: Horas Proceso (para tooltip)
+                {
+                    "name": "Horas Proceso",
+                    "type": "line",
+                    "yAxisIndex": 0,
+                    "data": horas_proceso_sala_vals,
+                    "showSymbol": False,
+                    "lineStyle": {"width": 0, "opacity": 0},
+                    "itemStyle": {"opacity": 0},
+                    "tooltip": {"show": True}
+                },
+                # Serie oculta: Detenciones (para tooltip)
+                {
+                    "name": "_det",
                     "type": "line",
                     "yAxisIndex": 0,
                     "data": detenciones_sala_vals,
@@ -827,7 +973,7 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
             ]
         }
         
-        st_echarts(options=opts_sala, height="380px", key=f"kg_hora_sala_{idx}")
+        st_echarts(options=opts_sala, height="450px", key=f"kg_hora_sala_{idx}")
 
 
 def _clasificar_turno(dt, dt_fin=None):
