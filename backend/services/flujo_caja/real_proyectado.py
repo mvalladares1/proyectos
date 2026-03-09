@@ -468,6 +468,7 @@ class RealProyectadoCalculator:
                         proveedor['montos_por_mes'][acum_per_proy] += acum_proy
 
             # PASO 4: Agregar proyecciones desde Módulo Compras (purchase.order)
+            # Incluir OCs con facturas parciales también
             campos_oc = [
                 'id', 'name', 'partner_id', 'amount_total', 'date_order',
                 'date_planned', 'date_approve', 'payment_term_id',
@@ -475,16 +476,35 @@ class RealProyectadoCalculator:
                 'x_studio_fecha_de'  # Campo personalizado: Fecha de Pago
             ]
 
-            ocs_compra = []
+            # Buscar TODAS las OCs confirmadas (con o sin facturas)
             ocs_compra = self.odoo.search_read(
                 'purchase.order',
-                [
-                    ['state', '=', 'purchase'],
-                    ['invoice_ids', '=', False]
-                ],
+                [['state', '=', 'purchase']],
                 campos_oc,
                 limit=10000
             )
+            
+            # Recolectar IDs de facturas para consulta batch
+            all_invoice_ids = []
+            for oc in ocs_compra:
+                invoice_ids = oc.get('invoice_ids') or []
+                if invoice_ids:
+                    all_invoice_ids.extend(invoice_ids)
+            
+            # Consultar facturas en batch para calcular montos facturados
+            facturas_por_id = {}
+            if all_invoice_ids:
+                try:
+                    facturas_oc = self.odoo.search_read(
+                        'account.move',
+                        [['id', 'in', all_invoice_ids]],
+                        ['id', 'amount_total', 'currency_id', 'state'],
+                        limit=len(all_invoice_ids)
+                    )
+                    for f in facturas_oc:
+                        facturas_por_id[f['id']] = f
+                except Exception as e:
+                    print(f"[RealProyectado] Error consultando facturas de OCs: {e}")
 
             # Mapa payment_term_id -> días de plazo (máximo día de las líneas)
             payment_term_ids = []
@@ -551,12 +571,13 @@ class RealProyectadoCalculator:
             from backend.services import distribuciones_oc_service
             oc_ids = [oc['id'] for oc in ocs_compra]
             distribuciones_manuales = distribuciones_oc_service.obtener_distribuciones_por_ids(oc_ids)
+            
+            # Lista para OCs que deben eliminarse (totalmente facturadas)
+            ocs_a_eliminar = []
 
             for oc in ocs_compra:
                 invoice_ids = oc.get('invoice_ids') or []
-                if invoice_ids:
-                    continue
-
+                
                 oc_id = oc.get('id')
                 amount_total = float(oc.get('amount_total') or 0.0)
                 
@@ -568,7 +589,41 @@ class RealProyectadoCalculator:
                     if 'USD' in currency_upper:
                         amount_total = CurrencyService.convert_usd_to_clp(amount_total)
                     elif 'UF' in currency_upper or 'CLF' in currency_upper:
-                        amount_total = CurrencyService.convert_uf_to_clp(amount_total)
+                        # CLF mal etiquetado: si monto > 100000, asumir CLP
+                        if amount_total > 100000:
+                            pass  # Ya es CLP
+                        else:
+                            amount_total = CurrencyService.convert_uf_to_clp(amount_total)
+                    
+                # Calcular monto facturado de esta OC
+                monto_facturado = 0.0
+                for inv_id in invoice_ids:
+                    factura = facturas_por_id.get(inv_id)
+                    if factura and factura.get('state') != 'cancel':
+                        inv_amount = float(factura.get('amount_total') or 0)
+                        inv_currency = factura.get('currency_id')
+                        inv_currency_name = inv_currency[1] if isinstance(inv_currency, (list, tuple)) and len(inv_currency) > 1 else ''
+                        
+                        if inv_currency_name:
+                            inv_currency_upper = str(inv_currency_name).upper()
+                            if 'USD' in inv_currency_upper:
+                                inv_amount = CurrencyService.convert_usd_to_clp(inv_amount)
+                            elif 'UF' in inv_currency_upper or 'CLF' in inv_currency_upper:
+                                if inv_amount > 100000:
+                                    pass
+                                else:
+                                    inv_amount = CurrencyService.convert_uf_to_clp(inv_amount)
+                        
+                        monto_facturado += inv_amount
+                
+                # Calcular monto pendiente
+                monto_pendiente = amount_total - monto_facturado
+                
+                # Si está totalmente facturado (tolerancia de $100), marcar para eliminar distribución
+                if monto_pendiente < 100:
+                    if oc_id in distribuciones_manuales:
+                        ocs_a_eliminar.append(oc_id)
+                    continue  # No proyectar esta OC
 
                 partner_data = oc.get('partner_id', [0, 'Sin proveedor'])
                 partner_id = partner_data[0] if isinstance(partner_data, (list, tuple)) and len(partner_data) > 0 else 0
@@ -579,9 +634,15 @@ class RealProyectadoCalculator:
                 # Verificar si existe distribución manual para esta OC
                 if oc_id in distribuciones_manuales:
                     # Usar distribución manual: múltiples fechas/montos
+                    # Nota: La distribución puede estar desactualizada si cambió el monto pendiente
+                    monto_distribucion_guardada = sum(float(d.get('monto', 0)) for d in distribuciones_manuales[oc_id])
+                    
+                    # Escalar proporcionalmente si el monto pendiente cambió
+                    factor_escala = monto_pendiente / monto_distribucion_guardada if monto_distribucion_guardada > 0 else 1.0
+                    
                     for dist in distribuciones_manuales[oc_id]:
                         fecha_dist = dist.get('fecha', '')
-                        monto_dist = float(dist.get('monto', 0))
+                        monto_dist = float(dist.get('monto', 0)) * factor_escala  # Escalar monto
                         
                         if not fecha_dist or monto_dist == 0:
                             continue
@@ -630,7 +691,7 @@ class RealProyectadoCalculator:
                         proveedor_data['monto'] += monto_proyectado
                         proveedor_data['montos_por_mes'][periodo_proyectado] += monto_proyectado
                 else:
-                    # Lógica original: usar una sola fecha para todo el monto
+                    # Lógica original: usar una sola fecha para todo el monto PENDIENTE
                     # PRIORIDAD: x_studio_fecha_de (Fecha de Pago), fallback a date_planned
                     fecha_pago = oc.get('x_studio_fecha_de')
                     if fecha_pago:
@@ -659,7 +720,7 @@ class RealProyectadoCalculator:
                     if not periodo_proyectado:
                         continue
 
-                    monto_proyectado = -amount_total
+                    monto_proyectado = -monto_pendiente  # Usar monto PENDIENTE, no total
                     if monto_proyectado == 0:
                         continue
 
@@ -692,6 +753,15 @@ class RealProyectadoCalculator:
                     proveedor_data = categoria['proveedores'][partner_name]
                     proveedor_data['monto'] += monto_proyectado
                     proveedor_data['montos_por_mes'][periodo_proyectado] += monto_proyectado
+            
+            # Auto-eliminar distribuciones de OCs totalmente facturadas
+            if ocs_a_eliminar:
+                for oc_id_eliminar in ocs_a_eliminar:
+                    try:
+                        distribuciones_oc_service.eliminar_distribucion(oc_id_eliminar)
+                        print(f"[RealProyectado] Distribución auto-eliminada para OC {oc_id_eliminar} (totalmente facturada)")
+                    except Exception as e:
+                        print(f"[RealProyectado] Error eliminando distribución OC {oc_id_eliminar}: {e}")
             
             # PASO 5: Agregar proyecciones desde Módulo Contabilidad (diario Proyecciones Futuras)
             facturas_proyecciones = self.odoo.search_read(

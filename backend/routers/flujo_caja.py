@@ -770,9 +770,9 @@ async def listar_ocs_sin_facturar(
             limit=10000
         )
         
-        # Obtener IDs de OCs para verificar cuáles tienen distribución
+        # Obtener IDs de OCs para verificar cuáles tienen distribución (con monto guardado)
         oc_ids = [oc['id'] for oc in ocs]
-        distribuciones = distribuciones_oc_service.obtener_distribuciones_por_ids(oc_ids)
+        info_distribuciones = distribuciones_oc_service.obtener_info_distribuciones_por_ids(oc_ids)
         
         # Recolectar IDs de facturas para consulta batch
         all_invoice_ids = []
@@ -881,6 +881,20 @@ async def listar_ocs_sin_facturar(
                 except:
                     pass
             
+            # Verificar distribución y si requiere reajuste
+            info_dist = info_distribuciones.get(oc['id'])
+            tiene_distribucion = info_dist is not None
+            num_cuotas = len(info_dist['distribuciones']) if info_dist else 0
+            
+            # Detectar si requiere reajuste (monto pendiente cambió más del 1%)
+            requiere_reajuste = False
+            monto_guardado = None
+            if info_dist:
+                monto_guardado = info_dist.get('monto_guardado', 0)
+                if monto_guardado > 0:
+                    diferencia_pct = abs(monto_pendiente - monto_guardado) / monto_guardado
+                    requiere_reajuste = diferencia_pct > 0.01  # Más de 1% de diferencia
+            
             resultado.append({
                 "oc_id": oc['id'],
                 "name": oc.get('name', ''),
@@ -889,13 +903,15 @@ async def listar_ocs_sin_facturar(
                 "monto_total": amount_total,
                 "monto_facturado": monto_facturado,
                 "monto_pendiente": monto_pendiente,
+                "monto_guardado": monto_guardado,  # Monto cuando se creó la distribución
                 "num_facturas": num_facturas,
                 "tiene_facturas_parciales": num_facturas > 0 and monto_pendiente > 0,
                 "moneda_original": currency_name,
                 "fecha_oc": str(oc.get('date_order', ''))[:10] if oc.get('date_order') else None,
                 "fecha_proyectada": fecha_proyectada,
-                "tiene_distribucion": oc['id'] in distribuciones,
-                "num_cuotas": len(distribuciones.get(oc['id'], [])),
+                "tiene_distribucion": tiene_distribucion,
+                "requiere_reajuste": requiere_reajuste,
+                "num_cuotas": num_cuotas,
                 "dias_restantes": dias_restantes,
                 "urgencia": urgencia
             })
@@ -929,6 +945,7 @@ async def listar_ocs_sin_facturar(
         con_distribucion = sum(1 for r in resultado if r['tiene_distribucion'])
         sin_distribucion = sum(1 for r in resultado if not r['tiene_distribucion'])
         con_facturas_parciales = sum(1 for r in resultado if r['tiene_facturas_parciales'])
+        requieren_reajuste = sum(1 for r in resultado if r['requiere_reajuste'])
         
         # Montos totales (pendientes)
         monto_pendiente_total = sum(r['monto_pendiente'] for r in resultado)
@@ -946,6 +963,7 @@ async def listar_ocs_sin_facturar(
             "con_distribucion": con_distribucion,
             "sin_distribucion": sin_distribucion,
             "con_facturas_parciales": con_facturas_parciales,
+            "requieren_reajuste": requieren_reajuste,
             "monto_total": monto_pendiente_total,  # Ahora es el total PENDIENTE
             "monto_facturado_total": monto_facturado_total,
             "monto_distribuido": monto_distribuido,

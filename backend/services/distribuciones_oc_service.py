@@ -328,6 +328,45 @@ def obtener_distribuciones_por_ids(oc_ids: List[int]) -> Dict[int, List[Dict[str
         return result
 
 
+def obtener_info_distribuciones_por_ids(oc_ids: List[int]) -> Dict[int, Dict[str, Any]]:
+    """
+    Obtiene información completa de distribuciones incluyendo monto guardado.
+    
+    Args:
+        oc_ids: Lista de IDs de OCs
+        
+    Returns:
+        Dict mapeando oc_id -> {monto_total, distribuciones, created_at, ...}
+    """
+    if not oc_ids:
+        return {}
+    
+    _ensure_schema()
+    
+    placeholders = ",".join("?" * len(oc_ids))
+    
+    with _get_connection() as conn:
+        cursor = conn.execute(
+            f"""
+            SELECT oc_id, monto_total, distribuciones, created_at, updated_at
+            FROM distribuciones_oc
+            WHERE oc_id IN ({placeholders})
+            """,
+            oc_ids
+        )
+        
+        result = {}
+        for row in cursor.fetchall():
+            result[row["oc_id"]] = {
+                "monto_guardado": row["monto_total"],
+                "distribuciones": json.loads(row["distribuciones"]),
+                "created_at": row["created_at"],
+                "updated_at": row["updated_at"]
+            }
+        
+        return result
+
+
 # ============================================================================
 # Plantillas de Distribución
 # ============================================================================
