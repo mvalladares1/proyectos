@@ -547,40 +547,19 @@ class RealProyectadoCalculator:
             fecha_inicio_dt = datetime.strptime(fecha_inicio, '%Y-%m-%d').date()
             fecha_fin_dt = datetime.strptime(fecha_fin, '%Y-%m-%d').date()
 
+            # Cargar distribuciones manuales de OCs
+            from backend.services import distribuciones_oc_service
+            oc_ids = [oc['id'] for oc in ocs_compra]
+            distribuciones_manuales = distribuciones_oc_service.obtener_distribuciones_por_ids(oc_ids)
+
             for oc in ocs_compra:
                 invoice_ids = oc.get('invoice_ids') or []
                 if invoice_ids:
                     continue
 
-                # PRIORIDAD: x_studio_fecha_de (Fecha de Pago), fallback a date_planned
-                fecha_pago = oc.get('x_studio_fecha_de')
-                if fecha_pago:
-                    fecha_proyectada = str(fecha_pago)[:10]
-                    try:
-                        fecha_proyectada_dt = datetime.strptime(fecha_proyectada, '%Y-%m-%d').date()
-                    except Exception:
-                        fecha_pago = None  # Fecha inválida, intentar con date_planned
-                
-                if not fecha_pago:
-                    # Fallback: usar date_planned
-                    date_planned = oc.get('date_planned')
-                    if date_planned:
-                        fecha_proyectada = str(date_planned)[:10]
-                        try:
-                            fecha_proyectada_dt = datetime.strptime(fecha_proyectada, '%Y-%m-%d').date()
-                        except Exception:
-                            continue  # Si ambas fechas inválidas, omitir OC
-                    else:
-                        continue  # Sin fecha válida, omitir OC
-
-                if fecha_proyectada_dt < fecha_inicio_dt or fecha_proyectada_dt > fecha_fin_dt:
-                    continue
-
-                periodo_proyectado = self._fecha_a_periodo(fecha_proyectada, meses_lista)
-                if not periodo_proyectado:
-                    continue
-
+                oc_id = oc.get('id')
                 amount_total = float(oc.get('amount_total') or 0.0)
+                
                 # Convertir moneda si es necesario (USD o UF -> CLP)
                 currency_data = oc.get('currency_id')
                 currency_name = currency_data[1] if isinstance(currency_data, (list, tuple)) and len(currency_data) > 1 else ''
@@ -591,45 +570,128 @@ class RealProyectadoCalculator:
                     elif 'UF' in currency_upper or 'CLF' in currency_upper:
                         amount_total = CurrencyService.convert_uf_to_clp(amount_total)
 
-                monto_proyectado = -amount_total
-                if monto_proyectado == 0:
-                    continue
-
                 partner_data = oc.get('partner_id', [0, 'Sin proveedor'])
                 partner_id = partner_data[0] if isinstance(partner_data, (list, tuple)) and len(partner_data) > 0 else 0
                 partner_name = partner_data[1] if isinstance(partner_data, (list, tuple)) and len(partner_data) > 1 else 'Sin proveedor'
                 partner_info = partners_info.get(partner_id, {'name': partner_name, 'categoria': 'Sin Categoría'})
                 categoria_nombre = partner_info['categoria']
 
-                proyectado_total += monto_proyectado
-                proyectado_por_periodo[periodo_proyectado] += monto_proyectado
+                # Verificar si existe distribución manual para esta OC
+                if oc_id in distribuciones_manuales:
+                    # Usar distribución manual: múltiples fechas/montos
+                    for dist in distribuciones_manuales[oc_id]:
+                        fecha_dist = dist.get('fecha', '')
+                        monto_dist = float(dist.get('monto', 0))
+                        
+                        if not fecha_dist or monto_dist == 0:
+                            continue
+                        
+                        try:
+                            fecha_dist_dt = datetime.strptime(fecha_dist, '%Y-%m-%d').date()
+                        except Exception:
+                            continue
+                        
+                        if fecha_dist_dt < fecha_inicio_dt or fecha_dist_dt > fecha_fin_dt:
+                            continue
+                        
+                        periodo_proyectado = self._fecha_a_periodo(fecha_dist, meses_lista)
+                        if not periodo_proyectado:
+                            continue
+                        
+                        monto_proyectado = -monto_dist  # Negativo porque es salida de caja
+                        
+                        proyectado_total += monto_proyectado
+                        proyectado_por_periodo[periodo_proyectado] += monto_proyectado
+                        
+                        estado = estados['PROYECTADAS_COMPRAS']
+                        estado['monto'] += monto_proyectado
+                        estado['montos_por_mes'][periodo_proyectado] += monto_proyectado
+                        
+                        if categoria_nombre not in estado['categorias']:
+                            estado['categorias'][categoria_nombre] = {
+                                'nombre': categoria_nombre,
+                                'monto': 0.0,
+                                'montos_por_mes': defaultdict(float),
+                                'proveedores': {}
+                            }
+                        
+                        categoria = estado['categorias'][categoria_nombre]
+                        categoria['monto'] += monto_proyectado
+                        categoria['montos_por_mes'][periodo_proyectado] += monto_proyectado
+                        
+                        if partner_name not in categoria['proveedores']:
+                            categoria['proveedores'][partner_name] = {
+                                'nombre': partner_name[:50],
+                                'monto': 0.0,
+                                'montos_por_mes': defaultdict(float)
+                            }
+                        
+                        proveedor_data = categoria['proveedores'][partner_name]
+                        proveedor_data['monto'] += monto_proyectado
+                        proveedor_data['montos_por_mes'][periodo_proyectado] += monto_proyectado
+                else:
+                    # Lógica original: usar una sola fecha para todo el monto
+                    # PRIORIDAD: x_studio_fecha_de (Fecha de Pago), fallback a date_planned
+                    fecha_pago = oc.get('x_studio_fecha_de')
+                    if fecha_pago:
+                        fecha_proyectada = str(fecha_pago)[:10]
+                        try:
+                            fecha_proyectada_dt = datetime.strptime(fecha_proyectada, '%Y-%m-%d').date()
+                        except Exception:
+                            fecha_pago = None  # Fecha inválida, intentar con date_planned
+                    
+                    if not fecha_pago:
+                        # Fallback: usar date_planned
+                        date_planned = oc.get('date_planned')
+                        if date_planned:
+                            fecha_proyectada = str(date_planned)[:10]
+                            try:
+                                fecha_proyectada_dt = datetime.strptime(fecha_proyectada, '%Y-%m-%d').date()
+                            except Exception:
+                                continue  # Si ambas fechas inválidas, omitir OC
+                        else:
+                            continue  # Sin fecha válida, omitir OC
 
-                estado = estados['PROYECTADAS_COMPRAS']
-                estado['monto'] += monto_proyectado
-                estado['montos_por_mes'][periodo_proyectado] += monto_proyectado
+                    if fecha_proyectada_dt < fecha_inicio_dt or fecha_proyectada_dt > fecha_fin_dt:
+                        continue
 
-                if categoria_nombre not in estado['categorias']:
-                    estado['categorias'][categoria_nombre] = {
-                        'nombre': categoria_nombre,
-                        'monto': 0.0,
-                        'montos_por_mes': defaultdict(float),
-                        'proveedores': {}
-                    }
+                    periodo_proyectado = self._fecha_a_periodo(fecha_proyectada, meses_lista)
+                    if not periodo_proyectado:
+                        continue
 
-                categoria = estado['categorias'][categoria_nombre]
-                categoria['monto'] += monto_proyectado
-                categoria['montos_por_mes'][periodo_proyectado] += monto_proyectado
+                    monto_proyectado = -amount_total
+                    if monto_proyectado == 0:
+                        continue
 
-                if partner_name not in categoria['proveedores']:
-                    categoria['proveedores'][partner_name] = {
-                        'nombre': partner_name[:50],
-                        'monto': 0.0,
-                        'montos_por_mes': defaultdict(float)
-                    }
+                    proyectado_total += monto_proyectado
+                    proyectado_por_periodo[periodo_proyectado] += monto_proyectado
 
-                proveedor = categoria['proveedores'][partner_name]
-                proveedor['monto'] += monto_proyectado
-                proveedor['montos_por_mes'][periodo_proyectado] += monto_proyectado
+                    estado = estados['PROYECTADAS_COMPRAS']
+                    estado['monto'] += monto_proyectado
+                    estado['montos_por_mes'][periodo_proyectado] += monto_proyectado
+
+                    if categoria_nombre not in estado['categorias']:
+                        estado['categorias'][categoria_nombre] = {
+                            'nombre': categoria_nombre,
+                            'monto': 0.0,
+                            'montos_por_mes': defaultdict(float),
+                            'proveedores': {}
+                        }
+
+                    categoria = estado['categorias'][categoria_nombre]
+                    categoria['monto'] += monto_proyectado
+                    categoria['montos_por_mes'][periodo_proyectado] += monto_proyectado
+
+                    if partner_name not in categoria['proveedores']:
+                        categoria['proveedores'][partner_name] = {
+                            'nombre': partner_name[:50],
+                            'monto': 0.0,
+                            'montos_por_mes': defaultdict(float)
+                        }
+
+                    proveedor_data = categoria['proveedores'][partner_name]
+                    proveedor_data['monto'] += monto_proyectado
+                    proveedor_data['montos_por_mes'][periodo_proyectado] += monto_proyectado
             
             # PASO 5: Agregar proyecciones desde Módulo Contabilidad (diario Proyecciones Futuras)
             facturas_proyecciones = self.odoo.search_read(

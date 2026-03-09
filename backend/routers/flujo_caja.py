@@ -2,12 +2,14 @@
 Router de Flujo de Caja - API endpoints para Estado de Flujo de Efectivo.
 """
 from fastapi import APIRouter, HTTPException, UploadFile, File
-from typing import Optional
+from pydantic import BaseModel
+from typing import Optional, List
 import json
 import logging
 
 # Importar desde módulo modularizado
 from backend.services.flujo_caja_service import FlujoCajaService
+from backend.services import distribuciones_oc_service
 
 logger = logging.getLogger(__name__)
 
@@ -537,3 +539,281 @@ async def reset_efectivo_inicial_config(username: Optional[str] = None):
     logger.info(f"Efectivo inicial reseteado a cálculo automático por {username}")
     
     return config["efectivo_inicial"]
+
+
+# ============================================================================
+# DISTRIBUCIONES DE OC - CRUD
+# ============================================================================
+
+class DistribucionItem(BaseModel):
+    """Un item de distribución con fecha y monto."""
+    fecha: str  # YYYY-MM-DD
+    monto: float
+
+
+class DistribucionOCRequest(BaseModel):
+    """Request para crear/actualizar distribución de OC."""
+    oc_id: int
+    oc_name: str
+    proveedor: str
+    monto_total: float
+    distribuciones: List[DistribucionItem]
+    proveedor_id: Optional[int] = None
+    created_by: Optional[str] = None
+
+
+class PlantillaDistribucionRequest(BaseModel):
+    """Request para generar plantilla de distribución."""
+    monto_total: float
+    tipo: str  # "cuotas_iguales", "semanal", "quincenal", "mensual"
+    num_cuotas: int
+    fecha_inicio: str  # YYYY-MM-DD
+    intervalo_dias: Optional[int] = None
+    # Datos opcionales de la OC para enriquecer respuesta
+    oc_id: Optional[int] = None
+    oc_name: Optional[str] = None
+    proveedor: Optional[str] = None
+
+
+@router.get("/distribuciones-oc")
+async def listar_distribuciones_oc():
+    """
+    Lista todas las distribuciones de OCs activas.
+    
+    Returns:
+        Lista de distribuciones con sus detalles
+    """
+    try:
+        return distribuciones_oc_service.listar_distribuciones()
+    except Exception as e:
+        logger.error(f"Error listando distribuciones: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/distribuciones-oc/{oc_id}")
+async def obtener_distribucion_oc(oc_id: int):
+    """
+    Obtiene la distribución de una OC específica.
+    
+    Args:
+        oc_id: ID de la OC en Odoo
+        
+    Returns:
+        Distribución si existe, 404 si no
+    """
+    try:
+        distribucion = distribuciones_oc_service.obtener_distribucion(oc_id)
+        if not distribucion:
+            raise HTTPException(status_code=404, detail=f"No existe distribución para OC {oc_id}")
+        return distribucion
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error obteniendo distribución {oc_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/distribuciones-oc")
+async def crear_actualizar_distribucion_oc(request: DistribucionOCRequest):
+    """
+    Crea o actualiza la distribución de una OC.
+    
+    La suma de las distribuciones debe ser igual al monto_total.
+    Si ya existe una distribución para la OC, se actualiza.
+    
+    Args:
+        request: Datos de la distribución
+        
+    Returns:
+        Distribución creada/actualizada
+    """
+    try:
+        distribuciones_list = [d.model_dump() for d in request.distribuciones]
+        
+        result = distribuciones_oc_service.crear_o_actualizar_distribucion(
+            oc_id=request.oc_id,
+            oc_name=request.oc_name,
+            proveedor=request.proveedor,
+            monto_total=request.monto_total,
+            distribuciones=distribuciones_list,
+            proveedor_id=request.proveedor_id,
+            created_by=request.created_by
+        )
+        
+        logger.info(f"Distribución OC {request.oc_id} creada/actualizada: {len(distribuciones_list)} cuotas")
+        return result
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error creando distribución: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/distribuciones-oc/{oc_id}")
+async def eliminar_distribucion_oc(oc_id: int):
+    """
+    Elimina la distribución de una OC.
+    
+    Usar cuando la OC se factura o se cancela.
+    
+    Args:
+        oc_id: ID de la OC en Odoo
+        
+    Returns:
+        Confirmación de eliminación
+    """
+    try:
+        eliminada = distribuciones_oc_service.eliminar_distribucion(oc_id)
+        if not eliminada:
+            raise HTTPException(status_code=404, detail=f"No existe distribución para OC {oc_id}")
+        
+        logger.info(f"Distribución OC {oc_id} eliminada")
+        return {"success": True, "message": f"Distribución OC {oc_id} eliminada"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error eliminando distribución {oc_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/distribuciones-oc/generar-plantilla")
+async def generar_plantilla_distribucion(request: PlantillaDistribucionRequest):
+    """
+    Genera una distribución automática basada en plantilla.
+    
+    NO guarda la distribución, solo la sugiere para que el usuario la revise.
+    
+    Args:
+        request: Parámetros de la plantilla
+        
+    Returns:
+        Distribución sugerida (lista de {fecha, monto})
+    """
+    try:
+        distribuciones = distribuciones_oc_service.generar_plantilla_distribucion(
+            monto_total=request.monto_total,
+            tipo=request.tipo,
+            num_cuotas=request.num_cuotas,
+            fecha_inicio=request.fecha_inicio,
+            intervalo_dias=request.intervalo_dias
+        )
+        
+        # Enriquecer respuesta con datos de OC si se proporcionaron
+        response = {
+            "monto_total": request.monto_total,
+            "tipo": request.tipo,
+            "num_cuotas": request.num_cuotas,
+            "distribuciones": distribuciones
+        }
+        
+        if request.oc_id:
+            response["oc_id"] = request.oc_id
+        if request.oc_name:
+            response["oc_name"] = request.oc_name
+        if request.proveedor:
+            response["proveedor"] = request.proveedor
+        
+        return response
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error generando plantilla: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/ocs-sin-facturar")
+async def listar_ocs_sin_facturar(
+    username: str,
+    password: str
+):
+    """
+    Lista OCs confirmadas sin facturar (candidatas a distribuir).
+    
+    Args:
+        username: Usuario Odoo
+        password: Contraseña Odoo
+        
+    Returns:
+        Lista de OCs con sus datos básicos y si tienen distribución
+    """
+    try:
+        service = FlujoCajaService(username=username, password=password)
+        
+        # Consultar OCs sin facturar
+        campos_oc = [
+            'id', 'name', 'partner_id', 'amount_total', 'date_order',
+            'date_planned', 'currency_id', 'x_studio_fecha_de'
+        ]
+        
+        ocs = service.odoo.search_read(
+            'purchase.order',
+            [
+                ['state', '=', 'purchase'],
+                ['invoice_ids', '=', False]
+            ],
+            campos_oc,
+            limit=10000
+        )
+        
+        # Obtener IDs de OCs para verificar cuáles tienen distribución
+        oc_ids = [oc['id'] for oc in ocs]
+        distribuciones = distribuciones_oc_service.obtener_distribuciones_por_ids(oc_ids)
+        
+        # Formatear resultado
+        from backend.services.currency_service import CurrencyService
+        
+        resultado = []
+        for oc in ocs:
+            partner_data = oc.get('partner_id', [0, 'Sin proveedor'])
+            partner_id = partner_data[0] if isinstance(partner_data, (list, tuple)) else 0
+            partner_name = partner_data[1] if isinstance(partner_data, (list, tuple)) and len(partner_data) > 1 else 'Sin proveedor'
+            
+            amount_total = float(oc.get('amount_total') or 0)
+            
+            # Convertir moneda si es necesario
+            currency_data = oc.get('currency_id')
+            currency_name = currency_data[1] if isinstance(currency_data, (list, tuple)) and len(currency_data) > 1 else 'CLP'
+            if currency_name:
+                currency_upper = str(currency_name).upper()
+                if 'USD' in currency_upper:
+                    amount_total = CurrencyService.convert_usd_to_clp(amount_total)
+                elif 'UF' in currency_upper or 'CLF' in currency_upper:
+                    amount_total = CurrencyService.convert_uf_to_clp(amount_total)
+            
+            # Determinar fecha proyectada actual
+            fecha_pago = oc.get('x_studio_fecha_de')
+            fecha_planned = oc.get('date_planned')
+            fecha_proyectada = fecha_pago or fecha_planned or oc.get('date_order')
+            if fecha_proyectada:
+                fecha_proyectada = str(fecha_proyectada)[:10]
+            
+            resultado.append({
+                "oc_id": oc['id'],
+                "name": oc.get('name', ''),
+                "proveedor": partner_name,
+                "proveedor_id": partner_id,
+                "monto_total": amount_total,
+                "moneda_original": currency_name,
+                "fecha_oc": str(oc.get('date_order', ''))[:10] if oc.get('date_order') else None,
+                "fecha_proyectada": fecha_proyectada,
+                "tiene_distribucion": oc['id'] in distribuciones,
+                "num_cuotas": len(distribuciones.get(oc['id'], []))
+            })
+        
+        # Ordenar: primero las que no tienen distribución, luego por monto descendente
+        resultado.sort(key=lambda x: (x['tiene_distribucion'], -x['monto_total']))
+        
+        return {
+            "total": len(resultado),
+            "con_distribucion": sum(1 for r in resultado if r['tiene_distribucion']),
+            "sin_distribucion": sum(1 for r in resultado if not r['tiene_distribucion']),
+            "ocs": resultado
+        }
+        
+    except Exception as e:
+        import traceback
+        logger.error(f"Error listando OCs sin facturar: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=str(e))
