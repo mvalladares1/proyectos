@@ -45,12 +45,29 @@ def _init_schema(conn: sqlite3.Connection) -> None:
             distribuciones TEXT NOT NULL,  -- JSON: [{"fecha": "2026-03-10", "monto": 3000000}, ...]
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            created_by TEXT
+            created_by TEXT,
+            estado TEXT DEFAULT 'activa',  -- activa, facturada_parcial, facturada
+            fecha_facturacion TEXT,
+            monto_facturado REAL DEFAULT 0
         );
         
         CREATE INDEX IF NOT EXISTS idx_distribuciones_oc_id ON distribuciones_oc(oc_id);
+        CREATE INDEX IF NOT EXISTS idx_distribuciones_estado ON distribuciones_oc(estado);
         """
     )
+    # Añadir columnas si no existen (migraciones para tablas existentes)
+    try:
+        conn.execute("ALTER TABLE distribuciones_oc ADD COLUMN estado TEXT DEFAULT 'activa'")
+    except sqlite3.OperationalError:
+        pass  # Columna ya existe
+    try:
+        conn.execute("ALTER TABLE distribuciones_oc ADD COLUMN fecha_facturacion TEXT")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        conn.execute("ALTER TABLE distribuciones_oc ADD COLUMN monto_facturado REAL DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass
     conn.commit()
 
 
@@ -72,9 +89,12 @@ def _ensure_schema() -> None:
 # CRUD Operations
 # ============================================================================
 
-def listar_distribuciones() -> List[Dict[str, Any]]:
+def listar_distribuciones(estado: Optional[str] = None) -> List[Dict[str, Any]]:
     """
-    Lista todas las distribuciones de OCs activas.
+    Lista distribuciones de OCs, opcionalmente filtradas por estado.
+    
+    Args:
+        estado: 'activa', 'facturada_parcial', 'facturada', o None para todas
     
     Returns:
         Lista de distribuciones con sus detalles
@@ -82,14 +102,28 @@ def listar_distribuciones() -> List[Dict[str, Any]]:
     _ensure_schema()
     
     with _get_connection() as conn:
-        cursor = conn.execute(
-            """
-            SELECT id, oc_id, oc_name, proveedor, proveedor_id, 
-                   monto_total, distribuciones, created_at, updated_at, created_by
-            FROM distribuciones_oc
-            ORDER BY created_at DESC
-            """
-        )
+        if estado:
+            cursor = conn.execute(
+                """
+                SELECT id, oc_id, oc_name, proveedor, proveedor_id, 
+                       monto_total, distribuciones, created_at, updated_at, created_by,
+                       estado, fecha_facturacion, monto_facturado
+                FROM distribuciones_oc
+                WHERE estado = ?
+                ORDER BY created_at DESC
+                """,
+                (estado,)
+            )
+        else:
+            cursor = conn.execute(
+                """
+                SELECT id, oc_id, oc_name, proveedor, proveedor_id, 
+                       monto_total, distribuciones, created_at, updated_at, created_by,
+                       estado, fecha_facturacion, monto_facturado
+                FROM distribuciones_oc
+                ORDER BY created_at DESC
+                """
+            )
         rows = cursor.fetchall()
         
         result = []
@@ -104,7 +138,10 @@ def listar_distribuciones() -> List[Dict[str, Any]]:
                 "distribuciones": json.loads(row["distribuciones"]),
                 "created_at": row["created_at"],
                 "updated_at": row["updated_at"],
-                "created_by": row["created_by"]
+                "created_by": row["created_by"],
+                "estado": row["estado"] or "activa",
+                "fecha_facturacion": row["fecha_facturacion"],
+                "monto_facturado": row["monto_facturado"] or 0
             })
         
         return result
@@ -126,7 +163,8 @@ def obtener_distribucion(oc_id: int) -> Optional[Dict[str, Any]]:
         cursor = conn.execute(
             """
             SELECT id, oc_id, oc_name, proveedor, proveedor_id, 
-                   monto_total, distribuciones, created_at, updated_at, created_by
+                   monto_total, distribuciones, created_at, updated_at, created_by,
+                   estado, fecha_facturacion, monto_facturado
             FROM distribuciones_oc
             WHERE oc_id = ?
             """,
@@ -147,7 +185,10 @@ def obtener_distribucion(oc_id: int) -> Optional[Dict[str, Any]]:
             "distribuciones": json.loads(row["distribuciones"]),
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
-            "created_by": row["created_by"]
+            "created_by": row["created_by"],
+            "estado": row["estado"] or "activa",
+            "fecha_facturacion": row["fecha_facturacion"],
+            "monto_facturado": row["monto_facturado"] or 0
         }
 
 
@@ -361,30 +402,204 @@ def generar_plantilla_distribucion(
 
 
 # ============================================================================
-# Limpieza Automática
+# Gestión de Estados
+# ============================================================================
+
+def marcar_como_facturada(
+    oc_id: int,
+    monto_facturado: Optional[float] = None,
+    parcial: bool = False
+) -> Optional[Dict[str, Any]]:
+    """
+    Marca una distribución como facturada (total o parcial).
+    
+    Args:
+        oc_id: ID de la OC en Odoo
+        monto_facturado: Monto que ya se facturó (para parciales)
+        parcial: Si True, es facturación parcial
+        
+    Returns:
+        Distribución actualizada o None si no existe
+    """
+    _ensure_schema()
+    
+    now = datetime.now().isoformat()
+    estado = "facturada_parcial" if parcial else "facturada"
+    
+    with _get_connection() as conn:
+        cursor = conn.execute(
+            """
+            UPDATE distribuciones_oc
+            SET estado = ?, fecha_facturacion = ?, monto_facturado = ?, updated_at = ?
+            WHERE oc_id = ?
+            """,
+            (estado, now, monto_facturado or 0, now, oc_id)
+        )
+        conn.commit()
+        
+        if cursor.rowcount == 0:
+            return None
+    
+    return obtener_distribucion(oc_id)
+
+
+def actualizar_estado_distribuciones(ocs_facturadas_ids: List[int]) -> Dict[str, int]:
+    """
+    Actualiza el estado de múltiples distribuciones basándose en OCs facturadas.
+    
+    Args:
+        ocs_facturadas_ids: Lista de IDs de OCs que ya tienen factura
+        
+    Returns:
+        Dict con contadores de actualizaciones
+    """
+    if not ocs_facturadas_ids:
+        return {"actualizadas": 0}
+    
+    _ensure_schema()
+    
+    now = datetime.now().isoformat()
+    placeholders = ",".join("?" * len(ocs_facturadas_ids))
+    
+    with _get_connection() as conn:
+        cursor = conn.execute(
+            f"""
+            UPDATE distribuciones_oc
+            SET estado = 'facturada', fecha_facturacion = ?, updated_at = ?
+            WHERE oc_id IN ({placeholders}) AND estado = 'activa'
+            """,
+            [now, now] + ocs_facturadas_ids
+        )
+        conn.commit()
+        return {"actualizadas": cursor.rowcount}
+
+
+def obtener_historial(limite: int = 50) -> List[Dict[str, Any]]:
+    """
+    Obtiene historial de distribuciones facturadas.
+    
+    Args:
+        limite: Máximo de registros a retornar
+        
+    Returns:
+        Lista de distribuciones facturadas
+    """
+    _ensure_schema()
+    
+    with _get_connection() as conn:
+        cursor = conn.execute(
+            """
+            SELECT id, oc_id, oc_name, proveedor, proveedor_id, 
+                   monto_total, distribuciones, created_at, updated_at, created_by,
+                   estado, fecha_facturacion, monto_facturado
+            FROM distribuciones_oc
+            WHERE estado IN ('facturada', 'facturada_parcial')
+            ORDER BY fecha_facturacion DESC
+            LIMIT ?
+            """,
+            (limite,)
+        )
+        rows = cursor.fetchall()
+        
+        result = []
+        for row in rows:
+            result.append({
+                "id": row["id"],
+                "oc_id": row["oc_id"],
+                "oc_name": row["oc_name"],
+                "proveedor": row["proveedor"],
+                "proveedor_id": row["proveedor_id"],
+                "monto_total": row["monto_total"],
+                "distribuciones": json.loads(row["distribuciones"]),
+                "created_at": row["created_at"],
+                "updated_at": row["updated_at"],
+                "created_by": row["created_by"],
+                "estado": row["estado"],
+                "fecha_facturacion": row["fecha_facturacion"],
+                "monto_facturado": row["monto_facturado"] or 0
+            })
+        
+        return result
+
+
+def obtener_estadisticas() -> Dict[str, Any]:
+    """
+    Obtiene estadísticas de las distribuciones.
+    
+    Returns:
+        Dict con estadísticas de distribuciones
+    """
+    _ensure_schema()
+    
+    with _get_connection() as conn:
+        # Contar por estado
+        cursor = conn.execute(
+            """
+            SELECT 
+                estado,
+                COUNT(*) as cantidad,
+                SUM(monto_total) as monto_total
+            FROM distribuciones_oc
+            GROUP BY estado
+            """
+        )
+        rows = cursor.fetchall()
+        
+        por_estado = {}
+        for row in rows:
+            estado = row["estado"] or "activa"
+            por_estado[estado] = {
+                "cantidad": row["cantidad"],
+                "monto_total": row["monto_total"] or 0
+            }
+        
+        # Total de cuotas activas próximas (30 días)
+        from datetime import date
+        fecha_limite = (date.today() + timedelta(days=30)).isoformat()
+        
+        cursor = conn.execute(
+            """
+            SELECT distribuciones
+            FROM distribuciones_oc
+            WHERE estado = 'activa' OR estado IS NULL
+            """
+        )
+        
+        cuotas_proximas = 0
+        monto_proximas = 0
+        for row in cursor.fetchall():
+            distribuciones = json.loads(row["distribuciones"])
+            for d in distribuciones:
+                if d.get("fecha") and d["fecha"] <= fecha_limite:
+                    cuotas_proximas += 1
+                    monto_proximas += d.get("monto", 0)
+        
+        return {
+            "por_estado": por_estado,
+            "cuotas_proximas_30d": cuotas_proximas,
+            "monto_proximas_30d": monto_proximas,
+            "total_activas": por_estado.get("activa", {}).get("cantidad", 0),
+            "total_facturadas": por_estado.get("facturada", {}).get("cantidad", 0)
+        }
+
+
+# ============================================================================
+# Limpieza Automática (deprecado - ahora usamos estados)
 # ============================================================================
 
 def limpiar_distribuciones_facturadas(oc_ids_facturadas: List[int]) -> int:
     """
-    Elimina distribuciones de OCs que ya fueron facturadas.
+    Marca distribuciones de OCs facturadas como 'facturada' en lugar de eliminarlas.
+    Mantiene el historial.
     
     Args:
         oc_ids_facturadas: Lista de IDs de OCs que ya tienen factura
         
     Returns:
-        Número de distribuciones eliminadas
+        Número de distribuciones actualizadas
     """
     if not oc_ids_facturadas:
         return 0
     
-    _ensure_schema()
-    
-    placeholders = ",".join("?" * len(oc_ids_facturadas))
-    
-    with _get_connection() as conn:
-        cursor = conn.execute(
-            f"DELETE FROM distribuciones_oc WHERE oc_id IN ({placeholders})",
-            oc_ids_facturadas
-        )
-        conn.commit()
-        return cursor.rowcount
+    result = actualizar_estado_distribuciones(oc_ids_facturadas)
+    return result.get("actualizadas", 0)

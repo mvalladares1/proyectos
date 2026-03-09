@@ -576,15 +576,18 @@ class PlantillaDistribucionRequest(BaseModel):
 
 
 @router.get("/distribuciones-oc")
-async def listar_distribuciones_oc():
+async def listar_distribuciones_oc(estado: Optional[str] = None):
     """
-    Lista todas las distribuciones de OCs activas.
+    Lista distribuciones de OCs, opcionalmente filtradas por estado.
+    
+    Args:
+        estado: 'activa', 'facturada_parcial', 'facturada', o None para todas
     
     Returns:
         Lista de distribuciones con sus detalles
     """
     try:
-        return distribuciones_oc_service.listar_distribuciones()
+        return distribuciones_oc_service.listar_distribuciones(estado=estado)
     except Exception as e:
         logger.error(f"Error listando distribuciones: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -727,7 +730,11 @@ async def generar_plantilla_distribucion(request: PlantillaDistribucionRequest):
 @router.get("/ocs-sin-facturar")
 async def listar_ocs_sin_facturar(
     username: str,
-    password: str
+    password: str,
+    search: Optional[str] = None,
+    filter_distribucion: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 50
 ):
     """
     Lista OCs confirmadas sin facturar (candidatas a distribuir).
@@ -735,6 +742,10 @@ async def listar_ocs_sin_facturar(
     Args:
         username: Usuario Odoo
         password: Contraseña Odoo
+        search: Búsqueda por nombre de OC o proveedor
+        filter_distribucion: 'si', 'no', o None para todas
+        page: Número de página (1-indexed)
+        page_size: Tamaño de página (máx 100)
         
     Returns:
         Lista de OCs con sus datos básicos y si tienen distribución
@@ -790,6 +801,23 @@ async def listar_ocs_sin_facturar(
             if fecha_proyectada:
                 fecha_proyectada = str(fecha_proyectada)[:10]
             
+            # Calcular días hasta la fecha
+            dias_restantes = None
+            urgencia = "normal"
+            if fecha_proyectada:
+                from datetime import date
+                try:
+                    fecha_dt = datetime.strptime(fecha_proyectada, "%Y-%m-%d").date()
+                    dias_restantes = (fecha_dt - date.today()).days
+                    if dias_restantes < 0:
+                        urgencia = "vencida"
+                    elif dias_restantes <= 7:
+                        urgencia = "urgente"
+                    elif dias_restantes <= 30:
+                        urgencia = "proxima"
+                except:
+                    pass
+            
             resultado.append({
                 "oc_id": oc['id'],
                 "name": oc.get('name', ''),
@@ -800,20 +828,127 @@ async def listar_ocs_sin_facturar(
                 "fecha_oc": str(oc.get('date_order', ''))[:10] if oc.get('date_order') else None,
                 "fecha_proyectada": fecha_proyectada,
                 "tiene_distribucion": oc['id'] in distribuciones,
-                "num_cuotas": len(distribuciones.get(oc['id'], []))
+                "num_cuotas": len(distribuciones.get(oc['id'], [])),
+                "dias_restantes": dias_restantes,
+                "urgencia": urgencia
             })
         
-        # Ordenar: primero las que no tienen distribución, luego por monto descendente
-        resultado.sort(key=lambda x: (x['tiene_distribucion'], -x['monto_total']))
+        # Aplicar filtro de búsqueda (server-side)
+        if search:
+            search_lower = search.lower()
+            resultado = [
+                r for r in resultado
+                if search_lower in r['name'].lower() or search_lower in r['proveedor'].lower()
+            ]
+        
+        # Aplicar filtro de distribución
+        if filter_distribucion == 'si':
+            resultado = [r for r in resultado if r['tiene_distribucion']]
+        elif filter_distribucion == 'no':
+            resultado = [r for r in resultado if not r['tiene_distribucion']]
+        
+        # Ordenar: primero las que no tienen distribución, luego por urgencia y monto
+        def sort_key(x):
+            urgencia_order = {'vencida': 0, 'urgente': 1, 'proxima': 2, 'normal': 3}
+            return (
+                x['tiene_distribucion'],  # False primero
+                urgencia_order.get(x['urgencia'], 3),
+                -x['monto_total']
+            )
+        resultado.sort(key=sort_key)
+        
+        # Calcular totales antes de paginar
+        total = len(resultado)
+        con_distribucion = sum(1 for r in resultado if r['tiene_distribucion'])
+        sin_distribucion = sum(1 for r in resultado if not r['tiene_distribucion'])
+        monto_total = sum(r['monto_total'] for r in resultado)
+        monto_distribuido = sum(r['monto_total'] for r in resultado if r['tiene_distribucion'])
+        
+        # Paginación
+        page_size = min(page_size, 100)  # Máximo 100
+        start = (page - 1) * page_size
+        end = start + page_size
+        ocs_paginated = resultado[start:end]
         
         return {
-            "total": len(resultado),
-            "con_distribucion": sum(1 for r in resultado if r['tiene_distribucion']),
-            "sin_distribucion": sum(1 for r in resultado if not r['tiene_distribucion']),
-            "ocs": resultado
+            "total": total,
+            "con_distribucion": con_distribucion,
+            "sin_distribucion": sin_distribucion,
+            "monto_total": monto_total,
+            "monto_distribuido": monto_distribuido,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": (total + page_size - 1) // page_size,
+            "ocs": ocs_paginated
         }
         
     except Exception as e:
         import traceback
         logger.error(f"Error listando OCs sin facturar: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/distribuciones-oc/historial")
+async def obtener_historial_distribuciones(limite: int = 50):
+    """
+    Obtiene historial de distribuciones facturadas.
+    
+    Args:
+        limite: Máximo de registros a retornar (default 50)
+        
+    Returns:
+        Lista de distribuciones facturadas con sus detalles
+    """
+    try:
+        return distribuciones_oc_service.obtener_historial(limite=limite)
+    except Exception as e:
+        logger.error(f"Error obteniendo historial: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/distribuciones-oc/estadisticas")
+async def obtener_estadisticas_distribuciones():
+    """
+    Obtiene estadísticas de las distribuciones.
+    
+    Returns:
+        Estadísticas de distribuciones (por estado, próximas, etc.)
+    """
+    try:
+        return distribuciones_oc_service.obtener_estadisticas()
+    except Exception as e:
+        logger.error(f"Error obteniendo estadísticas: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/distribuciones-oc/{oc_id}/marcar-facturada")
+async def marcar_oc_facturada(
+    oc_id: int,
+    monto_facturado: Optional[float] = None,
+    parcial: bool = False
+):
+    """
+    Marca una distribución como facturada.
+    
+    Args:
+        oc_id: ID de la OC
+        monto_facturado: Monto facturado (para parciales)
+        parcial: Si es facturación parcial
+        
+    Returns:
+        Distribución actualizada
+    """
+    try:
+        result = distribuciones_oc_service.marcar_como_facturada(
+            oc_id=oc_id,
+            monto_facturado=monto_facturado,
+            parcial=parcial
+        )
+        if not result:
+            raise HTTPException(status_code=404, detail=f"No existe distribución para OC {oc_id}")
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error marcando facturada OC {oc_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
