@@ -209,6 +209,9 @@ class ProyeccionFlujo:
             else:
                 # Facturas de proveedor: usar clasificación por cuenta contable
                 categoria, _ = self.clasificar_cuenta(acc_code)
+                # Si categoria es None, la cuenta debe excluirse
+                if categoria is None:
+                    continue
                 if not categoria:
                     categoria = "UNCLASSIFIED"
             

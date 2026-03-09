@@ -57,7 +57,18 @@ class ClasificadorCuentas:
             
         Returns:
             Tuple (concepto_id, es_explicito)
+            Si concepto_id es None, la cuenta debe EXCLUIRSE del flujo
         """
+        from .constants import CUENTAS_EXCLUIR_FLUJO, CUENTAS_RECLASIFICAR_126
+        
+        # PASO 0: Verificar si la cuenta debe excluirse del flujo
+        if codigo_cuenta in CUENTAS_EXCLUIR_FLUJO:
+            return None, True  # None indica exclusión
+        
+        # PASO 0.5: Verificar si la cuenta está reclasificada a 1.2.6
+        if codigo_cuenta in CUENTAS_RECLASIFICAR_126:
+            return CUENTAS_RECLASIFICAR_126[codigo_cuenta], True
+        
         # Primero intentar mapeo explícito
         concepto, es_explicito = self.clasificar_cuenta_explicita(codigo_cuenta)
         if es_explicito:

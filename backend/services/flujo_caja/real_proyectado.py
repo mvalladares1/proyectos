@@ -131,20 +131,26 @@ class RealProyectadoCalculator:
         - Nivel 3: Por proveedor
         """
         try:
+            # PASO 0.5: Ampliar fecha_inicio hacia atrás para capturar facturas pendientes 
+            # que se proyectan al periodo (ej: factura de enero con pago estimado en marzo)
+            fecha_inicio_dt = datetime.strptime(fecha_inicio, '%Y-%m-%d')
+            fecha_inicio_ampliada = (fecha_inicio_dt - timedelta(days=120)).strftime('%Y-%m-%d')
+            
             # PASO 1: Buscar facturas de proveedor desde diario específico
             facturas = self.odoo.search_read(
                 'account.move',
                 [
                     ['move_type', 'in', ['in_invoice', 'in_refund']],
                     ['journal_id', '=', 2],  # Facturas de Proveedores
-                    ['date', '>=', fecha_inicio],
-                    ['date', '<=', fecha_fin],
+                    ['invoice_date', '>=', fecha_inicio_ampliada],  # Ampliado 120 días atrás
+                    ['invoice_date', '<=', fecha_fin],
                     ['state', '=', 'posted'],
                     ['payment_state', '!=', 'reversed']
                 ],
                 ['id', 'name', 'move_type', 'date', 'invoice_date', 'invoice_date_due',
-                 'amount_total', 'amount_residual', 'payment_state', 'partner_id', 'x_studio_fecha_estimada_de_pago'],
-                limit=5000
+                 'amount_total', 'amount_residual', 'payment_state', 'partner_id', 'x_studio_fecha_estimada_de_pago',
+                 'currency_id'],  # Agregado para convertir USD/UF a CLP
+                limit=20000  # Aumentado de 5000 a 20000 para evitar truncamiento
             )
             
             real_total = 0.0
@@ -235,7 +241,7 @@ class RealProyectadoCalculator:
                 limit=50000
             )
             
-            # Agrupar líneas por factura
+            # OPTIMIZACIÓN: Agrupar líneas por factura usando dict comprehension
             lineas_por_factura = defaultdict(list)
             for linea in todas_lineas:
                 move_id = linea.get('move_id')
@@ -263,6 +269,18 @@ class RealProyectadoCalculator:
                 move_type = f.get('move_type', '')
                 partner_data = f.get('partner_id', [0, 'Sin proveedor'])
                 partner_name = partner_data[1] if isinstance(partner_data, (list, tuple)) and len(partner_data) > 1 else 'Sin proveedor'
+                
+                # Convertir moneda si es necesario (USD o UF -> CLP)
+                currency_data = f.get('currency_id')
+                currency_name = currency_data[1] if isinstance(currency_data, (list, tuple)) and len(currency_data) > 1 else ''
+                if currency_name:
+                    currency_upper = str(currency_name).upper()
+                    if 'USD' in currency_upper:
+                        amount_total = CurrencyService.convert_usd_to_clp(amount_total)
+                        amount_residual = CurrencyService.convert_usd_to_clp(amount_residual)
+                    elif 'UF' in currency_upper or 'CLF' in currency_upper:
+                        amount_total = CurrencyService.convert_uf_to_clp(amount_total)
+                        amount_residual = CurrencyService.convert_uf_to_clp(amount_residual)
                 
                 # Signo: N/C invierten el signo (devuelven dinero)
                 signo = -1 if move_type == 'in_refund' else 1
@@ -453,7 +471,8 @@ class RealProyectadoCalculator:
             campos_oc = [
                 'id', 'name', 'partner_id', 'amount_total', 'date_order',
                 'date_planned', 'date_approve', 'payment_term_id',
-                'invoice_ids', 'invoice_status', 'currency_id'
+                'invoice_ids', 'invoice_status', 'currency_id',
+                'x_studio_fecha_de'  # Campo personalizado: Fecha de Pago
             ]
 
             ocs_compra = []
@@ -533,25 +552,26 @@ class RealProyectadoCalculator:
                 if invoice_ids:
                     continue
 
-                fecha_base = str(oc.get('date_approve') or '')[:10]
-                if not fecha_base:
-                    continue
-
-                try:
-                    fecha_base_dt = datetime.strptime(fecha_base, '%Y-%m-%d').date()
-                except Exception:
-                    continue
-
-                pt_data = oc.get('payment_term_id')
-                pt_id = pt_data[0] if isinstance(pt_data, (list, tuple)) and len(pt_data) > 0 else pt_data
-                dias_plazo = payment_term_days.get(pt_id, 0)
-
-                if dias_plazo and dias_plazo > 0:
-                    fecha_proyectada_dt = fecha_base_dt + timedelta(days=dias_plazo)
-                else:
-                    fecha_proyectada_dt = fecha_base_dt
-
-                fecha_proyectada = fecha_proyectada_dt.strftime('%Y-%m-%d')
+                # PRIORIDAD: x_studio_fecha_de (Fecha de Pago), fallback a date_planned
+                fecha_pago = oc.get('x_studio_fecha_de')
+                if fecha_pago:
+                    fecha_proyectada = str(fecha_pago)[:10]
+                    try:
+                        fecha_proyectada_dt = datetime.strptime(fecha_proyectada, '%Y-%m-%d').date()
+                    except Exception:
+                        fecha_pago = None  # Fecha inválida, intentar con date_planned
+                
+                if not fecha_pago:
+                    # Fallback: usar date_planned
+                    date_planned = oc.get('date_planned')
+                    if date_planned:
+                        fecha_proyectada = str(date_planned)[:10]
+                        try:
+                            fecha_proyectada_dt = datetime.strptime(fecha_proyectada, '%Y-%m-%d').date()
+                        except Exception:
+                            continue  # Si ambas fechas inválidas, omitir OC
+                    else:
+                        continue  # Sin fecha válida, omitir OC
 
                 if fecha_proyectada_dt < fecha_inicio_dt or fecha_proyectada_dt > fecha_fin_dt:
                     continue
@@ -561,10 +581,15 @@ class RealProyectadoCalculator:
                     continue
 
                 amount_total = float(oc.get('amount_total') or 0.0)
+                # Convertir moneda si es necesario (USD o UF -> CLP)
                 currency_data = oc.get('currency_id')
                 currency_name = currency_data[1] if isinstance(currency_data, (list, tuple)) and len(currency_data) > 1 else ''
-                if currency_name and 'USD' in str(currency_name).upper():
-                    amount_total = CurrencyService.convert_usd_to_clp(amount_total)
+                if currency_name:
+                    currency_upper = str(currency_name).upper()
+                    if 'USD' in currency_upper:
+                        amount_total = CurrencyService.convert_usd_to_clp(amount_total)
+                    elif 'UF' in currency_upper or 'CLF' in currency_upper:
+                        amount_total = CurrencyService.convert_uf_to_clp(amount_total)
 
                 monto_proyectado = -amount_total
                 if monto_proyectado == 0:
@@ -614,7 +639,8 @@ class RealProyectadoCalculator:
                     ['move_type', 'in', ['in_invoice', 'in_refund']]
                 ],
                 ['id', 'name', 'partner_id', 'amount_total', 'date', 'invoice_date',
-                 'invoice_date_due', 'state', 'currency_id', 'move_type'],
+                 'invoice_date_due', 'state', 'currency_id', 'move_type',
+                 'x_studio_fecha_estimada_de_pago'],  # Campo personalizado para fecha de pago
                 limit=10000
             )
 
@@ -688,6 +714,23 @@ class RealProyectadoCalculator:
                 except Exception:
                     nombre_analitico_por_id = {}
 
+            # Obtener IDs de cuentas a excluir de PROYECTADAS_CONTABILIDAD
+            cuenta_iva_excluir_id = self._get_cuenta_iva_id()  # 11060108
+            cuentas_excluir_proyec_contab = {cuenta_iva_excluir_id} if cuenta_iva_excluir_id else set()
+            
+            # Agregar 62010101 a la exclusión
+            try:
+                cuenta_62010101 = self.odoo.search_read(
+                    'account.account',
+                    [['code', '=', '62010101']],
+                    ['id'],
+                    limit=1
+                )
+                if cuenta_62010101:
+                    cuentas_excluir_proyec_contab.add(cuenta_62010101[0]['id'])
+            except Exception:
+                pass
+
             for fp in facturas_proyecciones:
                 fecha_base = str(fp.get('date') or fp.get('invoice_date') or '')[:10]
                 if not fecha_base:
@@ -698,16 +741,24 @@ class RealProyectadoCalculator:
                 except Exception:
                     continue
 
-                # Usar invoice_date_due si existe, sino usar fecha_base
+                # PRIORIDAD: x_studio_fecha_estimada_de_pago > invoice_date_due > fecha_base
+                fecha_estimada = fp.get('x_studio_fecha_estimada_de_pago')
                 fecha_vencimiento = fp.get('invoice_date_due')
-                if fecha_vencimiento:
+                
+                if fecha_estimada:
+                    fecha_proyectada = str(fecha_estimada)[:10]
+                    try:
+                        fecha_proyectada_dt = datetime.strptime(fecha_proyectada, '%Y-%m-%d').date()
+                    except Exception:
+                        fecha_proyectada_dt = fecha_base_dt
+                elif fecha_vencimiento:
                     fecha_proyectada = str(fecha_vencimiento)[:10]
                     try:
                         fecha_proyectada_dt = datetime.strptime(fecha_proyectada, '%Y-%m-%d').date()
                     except Exception:
                         fecha_proyectada_dt = fecha_base_dt
                 else:
-                    # Sin fecha de vencimiento, usar fecha base directamente
+                    # Sin fecha estimada ni vencimiento, usar fecha base directamente
                     fecha_proyectada_dt = fecha_base_dt
                 
                 fecha_proyectada = fecha_proyectada_dt.strftime('%Y-%m-%d')
@@ -722,11 +773,15 @@ class RealProyectadoCalculator:
                 amount_total = float(fp.get('amount_total') or 0.0)
                 move_type = fp.get('move_type', 'in_invoice')
                 
-                # Convertir moneda si es necesario
+                # Convertir moneda si es necesario (USD o UF -> CLP)
                 currency_data = fp.get('currency_id')
                 currency_name = currency_data[1] if isinstance(currency_data, (list, tuple)) and len(currency_data) > 1 else ''
-                if currency_name and 'USD' in str(currency_name).upper():
-                    amount_total = CurrencyService.convert_usd_to_clp(amount_total)
+                if currency_name:
+                    currency_upper = str(currency_name).upper()
+                    if 'USD' in currency_upper:
+                        amount_total = CurrencyService.convert_usd_to_clp(amount_total)
+                    elif 'UF' in currency_upper or 'CLF' in currency_upper:
+                        amount_total = CurrencyService.convert_uf_to_clp(amount_total)
 
                 # N/C en módulo contabilidad invierten signo
                 signo = -1 if move_type == 'in_refund' else 1
@@ -753,6 +808,12 @@ class RealProyectadoCalculator:
 
                     account_data = linea.get('account_id')
                     account_id = account_data[0] if isinstance(account_data, (list, tuple)) and len(account_data) > 0 else account_data
+                    
+                    # Excluir cuentas específicas de PROYECTADAS_CONTABILIDAD
+                    # 11060108 se procesa en 1.2.6, 62010101 excluida por solicitud
+                    if account_id in cuentas_excluir_proyec_contab:
+                        continue
+
                     ifrs3 = (ifrs3_por_account.get(account_id) or '').strip()
                     if not ifrs3:
                         continue
@@ -1199,20 +1260,25 @@ class RealProyectadoCalculator:
         - PROYECTADO = Monto pendiente de cobro (amount_residual)
         """
         try:
+            # PASO 0.5: Ampliar fecha_inicio hacia atrás para capturar facturas pendientes 
+            # que se proyectan al periodo
+            fecha_inicio_dt = datetime.strptime(fecha_inicio, '%Y-%m-%d')
+            fecha_inicio_ampliada = (fecha_inicio_dt - timedelta(days=120)).strftime('%Y-%m-%d')
+            
             # Buscar facturas de cliente en el período
             facturas = self.odoo.search_read(
                 'account.move',
                 [
                     ['move_type', '=', 'out_invoice'],
                     ['state', '=', 'posted'],
-                    ['invoice_date', '>=', fecha_inicio],
+                    ['invoice_date', '>=', fecha_inicio_ampliada],  # Ampliado 120 días atrás
                     ['invoice_date', '<=', fecha_fin],
                     ['payment_state', '!=', 'reversed']  # Excluir facturas revertidas completamente
                 ],
                 ['id', 'name', 'partner_id', 'invoice_date', 'invoice_date_due',
                  'amount_total', 'amount_residual', 'payment_state', 'x_studio_fecha_estimada_de_pago',
                  'currency_id'],
-                limit=5000
+                limit=20000  # Aumentado de 5000 a 20000 para evitar truncamiento
             )
             
             real_total = 0.0
@@ -1301,12 +1367,17 @@ class RealProyectadoCalculator:
                 payment_state = f.get('payment_state', 'not_paid')
                 move_type = f.get('move_type', 'out_invoice')
                 
-                # Convertir moneda USD a CLP si es necesario
+                # Convertir moneda si es necesario (USD o UF -> CLP)
                 currency_data = f.get('currency_id')
                 currency_name = currency_data[1] if isinstance(currency_data, (list, tuple)) and len(currency_data) > 1 else ''
-                if currency_name and 'USD' in str(currency_name).upper():
-                    amount_total = CurrencyService.convert_usd_to_clp(amount_total)
-                    amount_residual = CurrencyService.convert_usd_to_clp(amount_residual)
+                if currency_name:
+                    currency_upper = str(currency_name).upper()
+                    if 'USD' in currency_upper:
+                        amount_total = CurrencyService.convert_usd_to_clp(amount_total)
+                        amount_residual = CurrencyService.convert_usd_to_clp(amount_residual)
+                    elif 'UF' in currency_upper or 'CLF' in currency_upper:
+                        amount_total = CurrencyService.convert_uf_to_clp(amount_total)
+                        amount_residual = CurrencyService.convert_uf_to_clp(amount_residual)
                 
                 # Determinar período proyectado basado en fecha estimada de pago
                 fecha_estimada = f.get('x_studio_fecha_estimada_de_pago')

@@ -41,7 +41,7 @@ ESTRUCTURA_FLUJO = {
 # Mapeo OBLIGATORIO de cuentas de financiamiento (Parametrización Fija)
 CUENTAS_FIJAS_FINANCIAMIENTO = {
     # 3.0.2 Importes procedentes de préstamos de corto plazo
-    "21010101": "3.0.2", "21010102": "3.0.2", "21010103": "3.0.2", "82010101": "3.0.2",
+    "21010101": "3.0.2", "21010103": "3.0.2", "82010101": "3.0.2",
     # 3.0.1 Importes procedentes de préstamos de largo plazo
     "21010213": "3.0.1", "21010223": "3.0.1", "22010101": "3.0.1",
     # 3.1.1 Préstamos de entidades relacionadas
@@ -50,6 +50,18 @@ CUENTAS_FIJAS_FINANCIAMIENTO = {
     "21010201": "3.1.4", "21010202": "3.1.4", "21010204": "3.1.4",
     "22010202": "3.1.4", "22010204": "3.1.4", "82010102": "3.1.4"
 }
+
+# Cuentas reclasificadas a 1.2.6 (Otras entradas/salidas de efectivo - Operación)
+CUENTAS_RECLASIFICAR_126 = {
+    "21010102": "1.2.6"  # Reclasificada desde 3.0.2 a Operación
+}
+
+# Cuentas a EXCLUIR completamente del flujo de caja
+CUENTAS_EXCLUIR_FLUJO = [
+    "21020101",  # Excluir del flujo
+    "11060101",  # Excluir del flujo
+    "62010101",  # Excluir del flujo
+]
 
 # Categorías técnicas especiales
 CATEGORIA_NEUTRAL = "NEUTRAL"       # No impacta flujo (transferencias internas)
