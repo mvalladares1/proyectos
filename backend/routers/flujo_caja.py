@@ -593,6 +593,39 @@ async def listar_distribuciones_oc(estado: Optional[str] = None):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/distribuciones-oc/historial")
+async def obtener_historial_distribuciones(limite: int = 50):
+    """
+    Obtiene historial de distribuciones facturadas.
+    
+    Args:
+        limite: Máximo de registros a retornar (default 50)
+        
+    Returns:
+        Lista de distribuciones facturadas con sus detalles
+    """
+    try:
+        return distribuciones_oc_service.obtener_historial(limite=limite)
+    except Exception as e:
+        logger.error(f"Error obteniendo historial: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/distribuciones-oc/estadisticas")
+async def obtener_estadisticas_distribuciones():
+    """
+    Obtiene estadísticas de las distribuciones.
+    
+    Returns:
+        Estadísticas de distribuciones (por estado, próximas, etc.)
+    """
+    try:
+        return distribuciones_oc_service.obtener_estadisticas()
+    except Exception as e:
+        logger.error(f"Error obteniendo estadísticas: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/distribuciones-oc/{oc_id}")
 async def obtener_distribucion_oc(oc_id: int):
     """
@@ -976,39 +1009,6 @@ async def listar_ocs_sin_facturar(
     except Exception as e:
         import traceback
         logger.error(f"Error listando OCs sin facturar: {traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/distribuciones-oc/historial")
-async def obtener_historial_distribuciones(limite: int = 50):
-    """
-    Obtiene historial de distribuciones facturadas.
-    
-    Args:
-        limite: Máximo de registros a retornar (default 50)
-        
-    Returns:
-        Lista de distribuciones facturadas con sus detalles
-    """
-    try:
-        return distribuciones_oc_service.obtener_historial(limite=limite)
-    except Exception as e:
-        logger.error(f"Error obteniendo historial: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/distribuciones-oc/estadisticas")
-async def obtener_estadisticas_distribuciones():
-    """
-    Obtiene estadísticas de las distribuciones.
-    
-    Returns:
-        Estadísticas de distribuciones (por estado, próximas, etc.)
-    """
-    try:
-        return distribuciones_oc_service.obtener_estadisticas()
-    except Exception as e:
-        logger.error(f"Error obteniendo estadísticas: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
