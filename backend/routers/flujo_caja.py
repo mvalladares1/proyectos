@@ -782,17 +782,25 @@ async def listar_ocs_sin_facturar(
             partner_id = partner_data[0] if isinstance(partner_data, (list, tuple)) else 0
             partner_name = partner_data[1] if isinstance(partner_data, (list, tuple)) and len(partner_data) > 1 else 'Sin proveedor'
             
-            amount_total = float(oc.get('amount_total') or 0)
+            amount_total_original = float(oc.get('amount_total') or 0)
+            amount_total = amount_total_original
             
             # Convertir moneda si es necesario
             currency_data = oc.get('currency_id')
             currency_name = currency_data[1] if isinstance(currency_data, (list, tuple)) and len(currency_data) > 1 else 'CLP'
+            convertido = False
             if currency_name:
                 currency_upper = str(currency_name).upper()
                 if 'USD' in currency_upper:
                     amount_total = CurrencyService.convert_usd_to_clp(amount_total)
+                    convertido = True
                 elif 'UF' in currency_upper or 'CLF' in currency_upper:
                     amount_total = CurrencyService.convert_uf_to_clp(amount_total)
+                    convertido = True
+            
+            # Log para debugging de montos grandes o conversiones
+            if convertido and amount_total > 1_000_000_000:
+                print(f"[DEBUG OC] {oc.get('name')}: original={amount_total_original:,.2f} {currency_name} -> convertido={amount_total:,.0f} CLP")
             
             # Determinar fecha proyectada actual
             fecha_pago = oc.get('x_studio_fecha_de')
