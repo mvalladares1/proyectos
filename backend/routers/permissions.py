@@ -314,3 +314,53 @@ def remove_exclusion_endpoint(
     _validate_admin(admin_username, admin_password)
     exclusiones = remove_exclusion(albaran)
     return {"exclusiones": exclusiones}
+
+
+# ============ OVERRIDE DE PRECIO PARA VALORIZACIÓN ============
+
+class PrecioOverrideRequest(BaseModel):
+    albaran: str
+    precio_unitario: float
+    motivo: Optional[str] = ""
+    admin_username: str
+    admin_password: str
+
+
+@router.get("/precio-override")
+def get_precio_override_endpoint() -> Dict:
+    """Obtiene mapa de precios override (público para servicios)."""
+    from backend.services.permissions_service import get_precio_override_map
+    return {"precio_override": get_precio_override_map()}
+
+
+@router.get("/precio-override/list")
+def get_precio_override_list_endpoint(
+    admin_username: str = Query(...),
+    admin_password: str = Query(...)
+) -> Dict:
+    """Obtiene lista detallada de precios override (solo admins)."""
+    from backend.services.permissions_service import get_precio_override_list
+    _validate_admin(admin_username, admin_password)
+    return {"precio_override": get_precio_override_list()}
+
+
+@router.post("/precio-override/add")
+def add_precio_override_endpoint(payload: PrecioOverrideRequest) -> Dict:
+    """Agrega o actualiza un override de precio."""
+    from backend.services.permissions_service import add_precio_override
+    _validate_admin(payload.admin_username, payload.admin_password)
+    override_list = add_precio_override(payload.albaran, payload.precio_unitario, payload.motivo or "")
+    return {"precio_override": override_list}
+
+
+@router.post("/precio-override/remove")
+def remove_precio_override_endpoint(
+    albaran: str = Query(...),
+    admin_username: str = Query(...),
+    admin_password: str = Query(...)
+) -> Dict:
+    """Elimina un override de precio."""
+    from backend.services.permissions_service import remove_precio_override
+    _validate_admin(admin_username, admin_password)
+    override_list = remove_precio_override(albaran)
+    return {"precio_override": override_list}

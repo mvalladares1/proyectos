@@ -135,9 +135,10 @@ def render(username: str, password: str):
     with content_placeholder:
         df = st.session_state.df_recepcion
         if df is not None:
-            # --- Cargar exclusiones de valorización usando función centralizada ---
-            from .shared import get_exclusiones
+            # --- Cargar exclusiones y precio overrides usando funciones centralizadas ---
+            from .shared import get_exclusiones, get_precio_override
             exclusiones_ids = get_exclusiones()
+            precio_override_map = get_precio_override()  # albaran -> precio_unitario
 
             # --- KPIs Consolidados ---
             st.subheader("📊 KPIs Consolidados")
@@ -146,6 +147,7 @@ def render(username: str, password: str):
             total_costo_mp = 0.0
             total_bandejas = 0.0
             recepciones_excluidas = 0
+            recepciones_con_override = 0
 
             # recorrer todas las recepciones y sus productos
             for _, row in df.iterrows():
@@ -157,23 +159,36 @@ def render(username: str, password: str):
                 # Verificar si esta recepción está excluida de valorización
                 recep_id = row.get('id') or row.get('picking_id')
                 recep_name = row.get('albaran', '')
+                
+                # Prioridad: 1) exclusión (no suma costo), 2) precio override, 3) costo original
                 excluir_costo = recep_id in exclusiones_ids or recep_name in exclusiones_ids
+                precio_override = precio_override_map.get(recep_name) or precio_override_map.get(str(recep_id))
+                
                 if excluir_costo:
                     recepciones_excluidas += 1
+                elif precio_override:
+                    recepciones_con_override += 1
 
                 if 'productos' in row and isinstance(row['productos'], list):
                     for p in row['productos']:
                         kg = p.get('Kg Hechos', 0) or 0
-                        costo = p.get('Costo Total', 0) or 0
+                        costo_original = p.get('Costo Total', 0) or 0
                         categoria = (p.get('Categoria') or "").strip().upper()
                         # detectar variantes que contengan 'BANDEJ' (Bandeja/Bandejas)
                         if 'BANDEJ' in categoria:
                             total_bandejas += kg
                         else:
                             total_kg_mp += kg
-                            # Solo sumar costo si NO está excluida
-                            if not excluir_costo:
-                                total_costo_mp += costo
+                            # Calcular costo según prioridad
+                            if excluir_costo:
+                                # Excluida: no sumar costo
+                                pass
+                            elif precio_override:
+                                # Override: usar precio_unitario * kg
+                                total_costo_mp += precio_override * kg
+                            else:
+                                # Normal: usar costo original
+                                total_costo_mp += costo_original
 
             # Calcular métricas y promedios existentes
             # Nota: eliminamos 'Total Kg Recepcionados (global)'.

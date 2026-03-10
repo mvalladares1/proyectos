@@ -541,3 +541,134 @@ def _fragment_config(username: str, password: str):
                         st.session_state.permisos_excluir_loading = False
                         st.rerun()
 
+    # Override de Precio para Valorización
+    st.divider()
+    st.markdown("### 💰 Override de Precio Unitario")
+    st.caption("Incluir recepciones en valorización con precio personalizado ($/kg)")
+    
+    # Cargar overrides de precio desde API
+    try:
+        resp_precio = httpx.get(
+            f"{API_URL}/api/v1/permissions/precio-override/list",
+            params={"admin_username": username, "admin_password": password},
+            timeout=10.0
+        )
+        if resp_precio.status_code == 200:
+            precio_override_list = resp_precio.json().get("precio_override", [])
+        else:
+            precio_override_list = []
+    except:
+        precio_override_list = []
+    
+    tabPO_L, tabPO_A = st.tabs(["📋 Actuales", "➕ Agregar"])
+    
+    with tabPO_L:
+        if precio_override_list:
+            for po in precio_override_list:
+                cl, cp, cm, cd = st.columns([3, 1.5, 2, 0.5])
+                cl.text(po["albaran"])
+                cp.text(f"${po['precio_unitario']:,.0f}/kg")
+                cm.caption(po.get("motivo", ""))
+                if cd.button("🗑️", key=f"po_del_{po['albaran']}"):
+                    try:
+                        resp = httpx.post(
+                            f"{API_URL}/api/v1/permissions/precio-override/remove",
+                            params={
+                                "albaran": po["albaran"],
+                                "admin_username": username,
+                                "admin_password": password
+                            },
+                            timeout=10.0
+                        )
+                        if resp.status_code == 200:
+                            st.toast(f"✅ Override de {po['albaran']} eliminado")
+                            st.rerun()
+                        else:
+                            st.error("Error al eliminar override")
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+            st.caption(f"Total: {len(precio_override_list)} overrides")
+        else:
+            st.caption("No hay overrides de precio configurados")
+    
+    with tabPO_A:
+        st.markdown("#### Buscar Recepciones Excluidas")
+        st.info("💡 Busca entre las recepciones **excluidas** para moverlas a precio override")
+        
+        # Mostrar exclusiones actuales para mover a precio override
+        if exclusiones_list:
+            po_options = [e["albaran"] for e in exclusiones_list]
+            po_selected = st.selectbox("Seleccionar recepción excluida:", options=[""] + po_options, key="po_select_albaran")
+            
+            if po_selected:
+                c1, c2 = st.columns([1, 2])
+                with c1:
+                    precio_nuevo = st.number_input("Precio $/kg:", min_value=0.0, value=500.0, step=50.0, key="po_precio")
+                with c2:
+                    po_motivo = st.text_input("Motivo (opcional):", placeholder="Ej: Precio negociado", key="po_motivo")
+                
+                if st.button("✅ Agregar Override y Remover de Exclusiones", type="primary"):
+                    try:
+                        # 1. Agregar override de precio
+                        resp_add = httpx.post(
+                            f"{API_URL}/api/v1/permissions/precio-override/add",
+                            json={
+                                "albaran": po_selected,
+                                "precio_unitario": precio_nuevo,
+                                "motivo": po_motivo or "Agregado desde panel",
+                                "admin_username": username,
+                                "admin_password": password
+                            },
+                            timeout=10.0
+                        )
+                        if resp_add.status_code == 200:
+                            # 2. Remover de exclusiones
+                            resp_rem = httpx.post(
+                                f"{API_URL}/api/v1/permissions/exclusiones/remove",
+                                params={
+                                    "albaran": po_selected,
+                                    "admin_username": username,
+                                    "admin_password": password
+                                },
+                                timeout=10.0
+                            )
+                            st.toast(f"✅ Override para {po_selected} guardado a ${precio_nuevo:,.0f}/kg")
+                            st.rerun()
+                        else:
+                            st.error("Error al agregar override")
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+        else:
+            st.caption("No hay exclusiones disponibles para convertir en override")
+        
+        st.divider()
+        st.markdown("#### Agregar Override Manual")
+        with st.form(key="form_add_precio_override", clear_on_submit=True):
+            albaran_manual = st.text_input("Albarán:", placeholder="RF/RFP/IN/00123")
+            cm1, cm2 = st.columns(2)
+            with cm1:
+                precio_manual = st.number_input("Precio $/kg:", min_value=0.0, value=500.0, step=50.0)
+            with cm2:
+                motivo_manual = st.text_input("Motivo:", placeholder="Ej: Ajuste de precio")
+            
+            if st.form_submit_button("➕ Agregar Override", use_container_width=True):
+                if albaran_manual:
+                    try:
+                        resp = httpx.post(
+                            f"{API_URL}/api/v1/permissions/precio-override/add",
+                            json={
+                                "albaran": albaran_manual,
+                                "precio_unitario": precio_manual,
+                                "motivo": motivo_manual or "Agregado manualmente",
+                                "admin_username": username,
+                                "admin_password": password
+                            },
+                            timeout=10.0
+                        )
+                        if resp.status_code == 200:
+                            st.toast(f"✅ Override para {albaran_manual} guardado")
+                            st.rerun()
+                        else:
+                            st.error("Error al agregar override")
+                    except Exception as e:
+                        st.error(f"Error: {e}")

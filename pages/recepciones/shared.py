@@ -282,23 +282,37 @@ def normalizar_especie_manejo(tipo_fruta: str, manejo: str = "") -> str:
 
 # --------------------- Carga de exclusiones ---------------------
 
-import json as _json
-
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=60, show_spinner=False)
 def get_exclusiones():
-    """Carga lista de IDs de recepciones excluidas de valorización."""
+    """Carga lista de IDs/albaranes de recepciones excluidas de valorización desde la API (DB)."""
     try:
-        # Path: pages/recepciones/shared.py -> project_root/shared/exclusiones.json
-        # __file__ = pages/recepciones/shared.py
-        # dirname = pages/recepciones
-        # dirname(dirname) = pages
-        # dirname(dirname(dirname)) = project_root
+        # Usar API de permisos que lee de la base de datos
+        resp = requests.get(f"{API_URL}/api/v1/permissions/exclusiones", timeout=5.0)
+        if resp.status_code == 200:
+            return resp.json().get("exclusiones", [])
+    except Exception:
+        pass
+    # Fallback: intentar leer JSON local si la API falla
+    try:
+        import json as _json
         project_root = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
         path = os.path.join(project_root, "shared", "exclusiones.json")
         if os.path.exists(path):
             with open(path, 'r') as f:
                 return _json.load(f).get("recepciones", [])
-    except:
+    except Exception:
         pass
     return []
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def get_precio_override():
+    """Carga mapa albaran -> precio_unitario desde la API (DB)."""
+    try:
+        resp = requests.get(f"{API_URL}/api/v1/permissions/precio-override", timeout=5.0)
+        if resp.status_code == 200:
+            return resp.json().get("precio_override", {})
+    except Exception:
+        pass
+    return {}
 

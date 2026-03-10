@@ -199,6 +199,14 @@ def _init_schema(conn: sqlite3.Connection) -> None:
             motivo TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         );
+        
+        -- Override de precio unitario para valorización
+        CREATE TABLE IF NOT EXISTS precio_override_valorizacion (
+            albaran TEXT PRIMARY KEY,
+            precio_unitario REAL NOT NULL,
+            motivo TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
         """
     )
     conn.execute(
@@ -629,3 +637,45 @@ def bulk_add_exclusiones(albaranes: List[str], motivo: str = "Migración desde J
                 (albaran.strip(), motivo),
             )
     return get_exclusiones_list()
+
+
+# ============ OVERRIDE DE PRECIO PARA VALORIZACIÓN ============
+
+def get_precio_override_list() -> List[Dict]:
+    """Obtiene lista de overrides de precio con detalle."""
+    _ensure_db()
+    with _get_connection() as conn:
+        rows = conn.execute(
+            "SELECT albaran, precio_unitario, motivo, created_at FROM precio_override_valorizacion ORDER BY created_at DESC"
+        ).fetchall()
+    return [{"albaran": r[0], "precio_unitario": r[1], "motivo": r[2] or "", "created_at": r[3]} for r in rows]
+
+
+def get_precio_override_map() -> Dict[str, float]:
+    """Obtiene diccionario albaran -> precio_unitario (para búsqueda rápida)."""
+    _ensure_db()
+    with _get_connection() as conn:
+        rows = conn.execute("SELECT albaran, precio_unitario FROM precio_override_valorizacion").fetchall()
+    return {r[0]: r[1] for r in rows}
+
+
+def add_precio_override(albaran: str, precio_unitario: float, motivo: str = "") -> List[Dict]:
+    """Agrega o actualiza un override de precio."""
+    _ensure_db()
+    with _get_connection() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO precio_override_valorizacion (albaran, precio_unitario, motivo, created_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)",
+            (albaran.strip(), precio_unitario, motivo.strip()),
+        )
+    return get_precio_override_list()
+
+
+def remove_precio_override(albaran: str) -> List[Dict]:
+    """Elimina un override de precio."""
+    _ensure_db()
+    with _get_connection() as conn:
+        conn.execute(
+            "DELETE FROM precio_override_valorizacion WHERE albaran = ?",
+            (albaran.strip(),),
+        )
+    return get_precio_override_list()
