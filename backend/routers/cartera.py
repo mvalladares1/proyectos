@@ -8,10 +8,10 @@ from datetime import datetime, date
 from collections import defaultdict
 import logging
 
-from backend.services.odoo_service import OdooService
+from shared.odoo_client import OdooClient
 from backend.services.currency_service import CurrencyService
 
-router = APIRouter(prefix="/cartera", tags=["cartera"])
+router = APIRouter(prefix="/api/v1/cartera", tags=["cartera"])
 logger = logging.getLogger(__name__)
 
 
@@ -63,7 +63,7 @@ async def obtener_antiguedad_cartera(
     Rangos de antigüedad basados en fecha estimada de pago vs fecha de corte.
     """
     try:
-        odoo = OdooService(username=username, password=password)
+        odoo = OdooClient(username=username, password=password)
         
         # Fecha de corte (hoy por defecto)
         if fecha_corte:
