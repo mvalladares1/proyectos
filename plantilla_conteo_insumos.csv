@@ -1,0 +1,32 @@
+# PLANTILLA DE CONTEO FÍSICO - BODEGA DE INSUMOS
+# ============================================
+# Formato: codigo,cantidad_fisica
+# Una línea por producto
+# Las líneas que empiezan con # son ignoradas
+#
+# Ejemplo:
+# 500000-24,1500
+# 500340,5000
+# 500058,8000
+
+# ----- GRUPO 1: CRÍTICOS (llenar primero) -----
+500000-24,
+500340,
+500058,
+500287-24,
+
+# ----- GRUPO 2: ALTO (llenar segundo) -----
+500000,
+500304,
+500066,
+500029,
+
+# ----- GRUPO 3: MEDIO (llenar después) -----
+500070,
+500066-A,
+500026,
+500212-24,
+500009-23,
+
+# ----- OTROS PRODUCTOS (agregar según conteo) -----
+

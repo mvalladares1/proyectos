@@ -1,0 +1,2583 @@
+{
+  "timestamp": "2026-03-10T11:38:35.521135",
+  "validations": {
+    "A1_consumo_operation": {
+      "status": "completed",
+      "findings": [
+        {
+          "type": "CONFIRMED",
+          "finding": "Tipo operación 'Consumo de Inventario' (ID 165) tiene 0 pickings completados",
+          "impact": "MEDIO"
+        },
+        {
+          "type": "CONFIRMED",
+          "finding": "Tipo operación 'Consumo de Inventario' (ID 150) tiene 2 pickings completados",
+          "impact": "MEDIO"
+        },
+        {
+          "type": "CONFIRMED",
+          "finding": "Los pickings de 'Consumo de Inventario' NO tienen correlación con OFs",
+          "impact": "Confirma uso como consumo manual independiente"
+        },
+        {
+          "type": "CONFIRMED",
+          "finding": "Tipo operación 'CONSUMO' (ID 177) tiene 365 pickings completados",
+          "impact": "ALTO"
+        },
+        {
+          "type": "CONFIRMED",
+          "finding": "Los pickings de 'CONSUMO' NO tienen correlación con OFs",
+          "impact": "Confirma uso como consumo manual independiente"
+        },
+        {
+          "type": "WARNING",
+          "finding": "Hay 9 pickings CONSUMO pendientes que se afectarían",
+          "impact": "Deben completarse o cancelarse antes de bloquear"
+        }
+      ]
+    },
+    "A2_mrp_consumption_flow": {
+      "status": "completed",
+      "findings": [
+        {
+          "type": "INFO",
+          "finding": "Modos de consumo: {'warning': 48, 'flexible': 2}",
+          "impact": "Determina si consumo es flexible o estricto"
+        },
+        {
+          "type": "CONFIRMED",
+          "finding": "De 30 OFs: 0 automático, 29 separado",
+          "impact": "El consumo en MRP parece estar funcionando correctamente"
+        }
+      ]
+    },
+    "A3_product_families": {
+      "status": "completed",
+      "findings": [
+        {
+          "type": "CONFIRMED",
+          "finding": "Familia INSUMOS_EMPAQUE: 497 quants, -7,246,321 uds negativas",
+          "value_impact": 1486725071.2987394,
+          "priority": "ALTA"
+        },
+        {
+          "type": "CONFIRMED",
+          "finding": "Familia MATERIAS_PRIMAS: 497 quants, -5,527,790 uds negativas",
+          "value_impact": 3752712377.050156,
+          "priority": "ALTA"
+        },
+        {
+          "type": "CONFIRMED",
+          "finding": "Familia PRODUCTO_PROCESO: 806 quants, -1,145,325 uds negativas",
+          "value_impact": 519576616.01225024,
+          "priority": "ALTA"
+        },
+        {
+          "type": "CONFIRMED",
+          "finding": "Familia OTROS: 188 quants, -229,877 uds negativas",
+          "value_impact": 205970889.36650005,
+          "priority": "ALTA"
+        },
+        {
+          "type": "CONFIRMED",
+          "finding": "Familia BANDEJAS_RETORNABLES: 7 quants, -19,506 uds negativas",
+          "value_impact": 17619270.81,
+          "priority": "ALTA"
+        },
+        {
+          "type": "CONFIRMED",
+          "finding": "Familia QUIMICOS: 5 quants, -1,219 uds negativas",
+          "value_impact": 545712.67,
+          "priority": "MEDIA"
+        }
+      ]
+    },
+    "A4_vendor_negatives_origin": {
+      "status": "completed",
+      "findings": [
+        {
+          "type": "PROBABLE",
+          "finding": "Causa 'recepciones_incompletas': afecta 1 productos",
+          "impact": "Requiere investigación detallada"
+        },
+        {
+          "type": "PROBABLE",
+          "finding": "Causa 'cancelaciones_posteriores': afecta 5 productos",
+          "impact": "Requiere investigación detallada"
+        },
+        {
+          "type": "CONFIRMED",
+          "finding": "Stock negativo en vendor afecta 191 productos",
+          "impact": "CRÍTICO - Indica recepciones sin compra o devoluciones incorrectas"
+        }
+      ]
+    },
+    "B_future_model": {
+      "status": "pending",
+      "findings": []
+    },
+    "C_rf_insumos_plan": {
+      "status": "pending",
+      "findings": [
+        {
+          "type": "CONFIRMED",
+          "finding": "RF/Insumos tiene 249 quants negativos sumando -1,836,045 uds",
+          "products_affected": 296,
+          "sublocations": 3
+        }
+      ]
+    },
+    "D_accounting_impact": {
+      "status": "completed",
+      "findings": [
+        {
+          "type": "CONFIRMED",
+          "product_id": 312,
+          "product_name": "AR S/V Conv. S/C Block Bins en Bins-2024",
+          "negative_qty": -2969637.76,
+          "value_impact": 2522401404.43072,
+          "priority": "CRÍTICA"
+        },
+        {
+          "type": "CONFIRMED",
+          "product_id": 268,
+          "product_name": "AR S/V Org. S/C Block Bins en Bins-2024",
+          "negative_qty": -2170885.2900000005,
+          "value_impact": 850987033.6800001,
+          "priority": "CRÍTICA"
+        },
+        {
+          "type": "CONFIRMED",
+          "product_id": 295,
+          "product_name": "FB MK Conv. S/C IQF Congelado en Bandeja-2024",
+          "negative_qty": -110118.87999999999,
+          "value_impact": 355586527.19120026,
+          "priority": "CRÍTICA"
+        },
+        {
+          "type": "CONFIRMED",
+          "product_id": 321,
+          "product_name": "CAJA EXPORTACIÓN 47x24.5x24.2-2024",
+          "negative_qty": -518209.0,
+          "value_impact": 310407191.0,
+          "priority": "CRÍTICA"
+        },
+        {
+          "type": "CONFIRMED",
+          "product_id": 255,
+          "product_name": "FB MK Conv. S/C PSP 10 kg en Caja-2024",
+          "negative_qty": -86687.31,
+          "value_impact": 292974414.30038995,
+          "priority": "CRÍTICA"
+        },
+        {
+          "type": "CONFIRMED",
+          "product_id": 250,
+          "product_name": "AR HB Org. >12 mm PSP 13.61 kg en Caja-2024",
+          "negative_qty": -160917.78000000003,
+          "value_impact": 251402008.6117799,
+          "priority": "CRÍTICA"
+        },
+        {
+          "type": "CONFIRMED",
+          "product_id": 357,
+          "product_name": "FB WF Org. IQF en Bandeja-2024",
+          "negative_qty": -63610.15,
+          "value_impact": 150214987.56409994,
+          "priority": "CRÍTICA"
+        },
+        {
+          "type": "CONFIRMED",
+          "product_id": 392,
+          "product_name": "GUANTES DE NITRILO (ARCHIVAR)-2024",
+          "negative_qty": -47610.0,
+          "value_impact": 130865130.9,
+          "priority": "CRÍTICA"
+        },
+        {
+          "type": "CONFIRMED",
+          "product_id": 261,
+          "product_name": "FB MK Conv. S/C IQF A 10 kg en Caja-2024",
+          "negative_qty": -26640.0,
+          "value_impact": 99595158.48000002,
+          "priority": "CRÍTICA"
+        },
+        {
+          "type": "CONFIRMED",
+          "product_id": 428,
+          "product_name": "FB WF Conv. IQF en Bandeja-2024",
+          "negative_qty": -38100.31999999999,
+          "value_impact": 73031798.28528,
+          "priority": "CRÍTICA"
+        },
+        {
+          "type": "CONFIRMED",
+          "product_id": 311,
+          "product_name": "AR S/V Conv. S/C Block 13.61 kg en Caja-2024",
+          "negative_qty": -169266.79999999987,
+          "value_impact": 69848960.62079997,
+          "priority": "CRÍTICA"
+        },
+        {
+          "type": "CONFIRMED",
+          "product_id": 322,
+          "product_name": "BOLSA AZUL 73X58X0.060-2024",
+          "negative_qty": -750896.0,
+          "value_impact": 66829744.0,
+          "priority": "CRÍTICA"
+        },
+        {
+          "type": "CONFIRMED",
+          "product_id": 300,
+          "product_name": "AR HB Org. S/C IQF Congelado en Bandeja-2024",
+          "negative_qty": -33373.1,
+          "value_impact": 56884549.06930002,
+          "priority": "CRÍTICA"
+        },
+        {
+          "type": "CONFIRMED",
+          "product_id": 317,
+          "product_name": "AR HB Conv. S/C IQF Congelado en Bandeja-2024",
+          "negative_qty": -35428.95,
+          "value_impact": 55684849.87035001,
+          "priority": "CRÍTICA"
+        },
+        {
+          "type": "CONFIRMED",
+          "product_id": 438,
+          "product_name": "nousar!MASCARILLAS 3 PLIEGUES (CAJA DE 50 UN)-2024",
+          "negative_qty": -51770.0,
+          "value_impact": 50451003.940000005,
+          "priority": "CRÍTICA"
+        },
+        {
+          "type": "CONFIRMED",
+          "product_id": 242,
+          "product_name": "AR HB Conv. >11 mm PSP 13.61 kg en Caja-2024",
+          "negative_qty": -6934.48,
+          "value_impact": 48540819.11056,
+          "priority": "CRÍTICA"
+        },
+        {
+          "type": "CONFIRMED",
+          "product_id": 327,
+          "product_name": "Bandeja IQF 60x40",
+          "negative_qty": -375563.0,
+          "value_impact": 45235436.661,
+          "priority": "CRÍTICA"
+        },
+        {
+          "type": "CONFIRMED",
+          "product_id": 249,
+          "product_name": "AR HB Org. <11 mm PSP 13.61 kg en Caja-2024",
+          "negative_qty": -30486.4,
+          "value_impact": 42946161.19359999,
+          "priority": "CRÍTICA"
+        },
+        {
+          "type": "CONFIRMED",
+          "product_id": 264,
+          "product_name": "FB WF Org. S/C IQF A 10 kg en Caja-2024",
+          "negative_qty": -8800.0,
+          "value_impact": 31416000.0,
+          "priority": "CRÍTICA"
+        },
+        {
+          "type": "CONFIRMED",
+          "product_id": 258,
+          "product_name": "FB WF Org. S/C PSP 10 kg en Caja-2024",
+          "negative_qty": -11560.0,
+          "value_impact": 29340378.200000003,
+          "priority": "CRÍTICA"
+        },
+        {
+          "type": "CONFIRMED",
+          "finding": "100 capas de valoración con remaining_qty < 0",
+          "value_impact": 0.0,
+          "impact": "Afecta cálculo de costo promedio"
+        }
+      ]
+    }
+  },
+  "results": {
+    "consumo_top_products": {
+      "[500341] BOLSA DP BLUEBERRIES ALDI 24 OZ 680 GR": 371066.0,
+      "[500340] BOLSA BD TRANSPARENTE GENÉRICA 25X30 60 MC": 223191.0,
+      "[500058] COFIAS (UN)": 91973.0,
+      "[500338] CAJA TAPA ALDI 12X32 oz": 85317.0,
+      "[500064] ETIQUETA 3x5 BLANCA": 71220.0,
+      "[500345] BOLSA 230X320X100 ZIP ARANDANOS ATO": 60200.0,
+      "[500342] ETIQUETA 100X100 BLUEBERRY": 48000.0,
+      "[500058-24] Bandeja Negra 50x30 (copia)": 27702.0,
+      "[500069] BOLSA BASURA NEGRA 110X120": 21832.0,
+      "[500303] ESQUINEROS BLANCOS 1.8 MTS. (UN)": 20030.0,
+      "[500306] ETIQUETA 100x50 VERDE": 20000.0,
+      "[500064-24] Etiquetas 10x15 Blanca (copia)": 19356.0,
+      "[500337] CAJA BANDEJA EXHIBIDORA ALDI MIX BERRY 12X32 oz": 19137.0,
+      "[500343] ETIQUETA 100X100 MIX BERRIES": 18000.0,
+      "[500216-24] Etiquetas 10x10 Amarilla (archivar) (copia)": 17968.0,
+      "[500346] BOLSA 230X320X100 ZIP MIXED BERRIES ATO": 10500.0,
+      "[500344] ETIQUETA 100X100 RASPBERRY": 9000.0,
+      "[500066] FILM MANUAL": 8601.0,
+      "[500304] ESQUINEROS BLANCOS 2.25 MTS. (UN)": 8450.0,
+      "[500057] COFIAS MONJA (UN)": 6300.0,
+      "[500069-24] Bolsa negra 110x120": 5468.0,
+      "[500060-24] Esquineros blancos": 5230.0,
+      "[500026MAZ] GUANTES DE NITRILO CAJA (M, AZUL)": 5000.0,
+      "[500062] MASCARILLAS 3 PLIEGUES (CAJA DE 50 UN)": 3897.0,
+      "[500026LAZ] GUANTES DE NITRILO CAJA (L, AZUL)": 3600.0,
+      "[500100] GUANTE TÉRMICO PRIMERA CAPA": 2589.0,
+      "[500070-24] Bolsa negra 50x70": 2445.0,
+      "[500078] PALLET DE EXPORTACIÓN GMA (YUGO)": 2078.0,
+      "[500001] BOLSA AZUL 73X58X0.060": 2000.0,
+      "[500070] BOLSA BASURA NEGRA 50X70": 1750.0,
+      "[500011] BOLSA AZUL 31X57X0.045": 1500.0,
+      "[500066-24] FILM MANUAL": 981.0,
+      "[500085] PALLET DE EXPORTACIÓN 1X1.20 MT": 974.0,
+      "[12] BOLSA NEGRA 50X70": 600.0,
+      "[500013] JARDINERA TÉRMICA": 590.0,
+      "[500028] PROTECTOR AUDITIVO TIPO AUDÍFONOS": 506.0,
+      "[500103] TERMOGRAFO DESECHABLE": 495.0,
+      "[500015] ZAPATOS DE SEGURIDAD (PAR)": 489.0,
+      "[500052] ROLLO PAPEL HIGIENICO": 483.0,
+      "[500085-24] Pallet de Madera 1x1,20 mt (copia)": 395.0,
+      "[500212] FOAMCHLOR": 358.89000000000004,
+      "[500020] DELANTALES CON CAPUCHA ROJOS": 303.0,
+      "[500203] PARKA TÉRMICA AZUL": 295.0,
+      "[500019] DELANTALES CON CAPUCHA AZUL": 233.0,
+      "[500087] ROLLO29x25CMx300MT PAÑOS": 227.0,
+      "[500029-24] Protector auditivo tipo audífonos (copia)": 206.0,
+      "[500078-24] Pallet de Madera 1x1,20 mt (copia)": 166.0,
+      "[500350] CINTA EMBALAJE COLORES (ROLLO)": 165.0,
+      "[500051-24] Señaletica piso mojado (copia)": 164.0,
+      "[500032] CINTA TERMOTRANSFERENCIA 110x450": 148.0
+    },
+    "consumo_types": [
+      {
+        "id": 165,
+        "name": "Consumo de Inventario",
+        "code": "mrp_operation",
+        "sequence_code": "Transf",
+        "active": true,
+        "default_location_src_id": [
+          24,
+          "RF/Insumos/Bodega Insumos"
+        ],
+        "default_location_dest_id": [
+          24,
+          "RF/Insumos/Bodega Insumos"
+        ],
+        "warehouse_id": [
+          1,
+          "Rio Futuro"
+        ],
+        "company_id": [
+          1,
+          "RIO FUTURO PROCESOS SPA"
+        ],
+        "use_create_lots": true,
+        "use_existing_lots": true,
+        "show_operations": true
+      },
+      {
+        "id": 150,
+        "name": "Consumo de Inventario",
+        "code": "mrp_operation",
+        "sequence_code": "Cons",
+        "active": true,
+        "default_location_src_id": [
+          7,
+          "RF"
+        ],
+        "default_location_dest_id": [
+          5411,
+          "RF/Stock/Consumo Interno"
+        ],
+        "warehouse_id": [
+          1,
+          "Rio Futuro"
+        ],
+        "company_id": [
+          1,
+          "RIO FUTURO PROCESOS SPA"
+        ],
+        "use_create_lots": true,
+        "use_existing_lots": true,
+        "show_operations": true
+      },
+      {
+        "id": 177,
+        "name": "CONSUMO",
+        "code": "internal",
+        "sequence_code": "RFP/CONS",
+        "active": true,
+        "default_location_src_id": [
+          5474,
+          "RF/Insumos"
+        ],
+        "default_location_dest_id": [
+          5478,
+          "Virtual Locations/Consumo-CentroCosto"
+        ],
+        "warehouse_id": [
+          1,
+          "Rio Futuro"
+        ],
+        "company_id": [
+          1,
+          "RIO FUTURO PROCESOS SPA"
+        ],
+        "use_create_lots": true,
+        "use_existing_lots": true,
+        "show_operations": true
+      }
+    ],
+    "pending_consumo": [
+      {
+        "id": 1467,
+        "name": "WH/Cons/00001",
+        "state": "draft",
+        "scheduled_date": "2023-11-29 19:39:18"
+      },
+      {
+        "id": 1600,
+        "name": "WH/Cons/00003",
+        "state": "draft",
+        "scheduled_date": "2023-12-27 19:53:10"
+      },
+      {
+        "id": 2853,
+        "name": "WH/Cons/00005",
+        "state": "draft",
+        "scheduled_date": "2024-03-01 12:42:09"
+      },
+      {
+        "id": 10541,
+        "name": "CONS1198",
+        "state": "draft",
+        "scheduled_date": "2025-08-14 18:11:21"
+      },
+      {
+        "id": 11350,
+        "name": "CONS1221",
+        "state": "draft",
+        "scheduled_date": "2025-11-25 19:56:01"
+      },
+      {
+        "id": 14978,
+        "name": "CONS1299",
+        "state": "assigned",
+        "scheduled_date": "2026-01-09 18:20:21"
+      },
+      {
+        "id": 15807,
+        "name": "CONS1338",
+        "state": "draft",
+        "scheduled_date": "2026-01-15 14:28:12"
+      },
+      {
+        "id": 16242,
+        "name": "CONS1361",
+        "state": "assigned",
+        "scheduled_date": "2026-01-19 18:52:40"
+      },
+      {
+        "id": 17952,
+        "name": "CONS1378",
+        "state": "assigned",
+        "scheduled_date": "2026-02-16 15:08:52"
+      }
+    ],
+    "mrp_analysis": {
+      "bom_consumption_modes": {
+        "warning": 48,
+        "flexible": 2
+      },
+      "productions_analysis": [
+        {
+          "production": "WH/Transf/00656",
+          "product": "[1.1] PROCESO CONGELADO TÚNEL ESTÁTICO 1",
+          "qty": 10588.85,
+          "raw_moves_count": 2,
+          "done_moves": 2,
+          "consumption_mode": "flexible",
+          "location_src": "RF"
+        },
+        {
+          "production": "VLK/MO/00160",
+          "product": "[2.2] PROCESO PTT",
+          "qty": 672.0,
+          "raw_moves_count": 3,
+          "done_moves": 3,
+          "consumption_mode": "flexible",
+          "location_src": "VLK/Stock",
+          "consumption_type": "SEPARATE"
+        },
+        {
+          "production": "VLK/MO/00142",
+          "product": "[2.2] PROCESO PTT",
+          "qty": 5810.0,
+          "raw_moves_count": 4,
+          "done_moves": 3,
+          "consumption_mode": "flexible",
+          "location_src": "VLK/Camara 2 -25°C/A4",
+          "consumption_type": "SEPARATE"
+        },
+        {
+          "production": "WH/RF/MOV/RETAIL/00876",
+          "product": "[4] Proceso Retail",
+          "qty": 3034.83,
+          "raw_moves_count": 7,
+          "done_moves": 6,
+          "consumption_mode": "flexible",
+          "location_src": "RF/Stock/Inventario Real",
+          "consumption_type": "SEPARATE"
+        },
+        {
+          "production": "VLK/MO/00140",
+          "product": "[2.2] PROCESO PTT",
+          "qty": 2520.0,
+          "raw_moves_count": 5,
+          "done_moves": 3,
+          "consumption_mode": "flexible",
+          "location_src": "VLK/Camara 2 -25°C/A4",
+          "consumption_type": "SEPARATE"
+        },
+        {
+          "production": "WH/RF/MO/01062",
+          "product": "[2.2] PROCESO PTT",
+          "qty": 12852.0,
+          "raw_moves_count": 3,
+          "done_moves": 3,
+          "consumption_mode": "flexible",
+          "location_src": "RF/Stock/Inventario Real",
+          "consumption_type": "SEPARATE"
+        },
+        {
+          "production": "WH/RF/MOV/RETAIL/00875",
+          "product": "[2.2] PROCESO PTT",
+          "qty": 3021.42,
+          "raw_moves_count": 6,
+          "done_moves": 6,
+          "consumption_mode": "flexible",
+          "location_src": "RF/Stock/Inventario Real",
+          "consumption_type": "SEPARATE"
+        },
+        {
+          "production": "WH/RF/MO/01059",
+          "product": "[3] Proceso de Vaciado",
+          "qty": 13970.72,
+          "raw_moves_count": 4,
+          "done_moves": 3,
+          "consumption_mode": "flexible",
+          "location_src": "Tránsito/Salida Túneles Estáticos",
+          "consumption_type": "SEPARATE"
+        },
+        {
+          "production": "RF/MO/CongTE1/00351",
+          "product": "[1.1] PROCESO CONGELADO TÚNEL ESTÁTICO 1",
+          "qty": 11449.2,
+          "raw_moves_count": 2,
+          "done_moves": 2,
+          "consumption_mode": "flexible",
+          "location_src": "RF/Stock/Camara 0°C REAL",
+          "consumption_type": "SEPARATE"
+        },
+        {
+          "production": "WH/Transf/00873",
+          "product": "[2.1] PROCESO PSP",
+          "qty": 16683.87,
+          "raw_moves_count": 3,
+          "done_moves": 3,
+          "consumption_mode": "flexible",
+          "location_src": "RF/Insumos/Bodega Insumos",
+          "consumption_type": "SEPARATE"
+        },
+        {
+          "production": "RF/MO/CongTE3/00141",
+          "product": "[1.3] PROCESO CONGELADO TÚNEL ESTÁTICO 3",
+          "qty": 1102.5,
+          "raw_moves_count": 2,
+          "done_moves": 2,
+          "consumption_mode": "flexible",
+          "location_src": "RF/Stock/Camara 0°C REAL",
+          "consumption_type": "SEPARATE"
+        },
+        {
+          "production": "WH/Transf/00833",
+          "product": "[2.1] PROCESO PSP",
+          "qty": 23336.32,
+          "raw_moves_count": 3,
+          "done_moves": 3,
+          "consumption_mode": "flexible",
+          "location_src": "RF/Insumos/Bodega Insumos",
+          "consumption_type": "SEPARATE"
+        },
+        {
+          "production": "RF/MO/CongTE2/01179",
+          "product": "[1.2] PROCESO CONGELADO TÚNEL ESTÁTICO 2",
+          "qty": 11364.34,
+          "raw_moves_count": 2,
+          "done_moves": 2,
+          "consumption_mode": "flexible",
+          "location_src": "RF/Stock/Camara 0°C REAL",
+          "consumption_type": "SEPARATE"
+        },
+        {
+          "production": "WH/Transf/00878",
+          "product": "[2.1] PROCESO PSP",
+          "qty": 13244.7,
+          "raw_moves_count": 3,
+          "done_moves": 3,
+          "consumption_mode": "flexible",
+          "location_src": "RF/Insumos/Bodega Insumos",
+          "consumption_type": "SEPARATE"
+        },
+        {
+          "production": "RF/MO/CongTE1/00350",
+          "product": "[1.1] PROCESO CONGELADO TÚNEL ESTÁTICO 1",
+          "qty": 7225.85,
+          "raw_moves_count": 2,
+          "done_moves": 2,
+          "consumption_mode": "flexible",
+          "location_src": "RF/Stock/Camara 0°C REAL",
+          "consumption_type": "SEPARATE"
+        },
+        {
+          "production": "WH/RF/MO/01058",
+          "product": "[2.2] PROCESO PTT",
+          "qty": 7200.0,
+          "raw_moves_count": 8,
+          "done_moves": 5,
+          "consumption_mode": "flexible",
+          "location_src": "RF/Stock/Inventario Real",
+          "consumption_type": "SEPARATE"
+        },
+        {
+          "production": "WH/RF/MO/01061",
+          "product": "[2.2] PROCESO PTT",
+          "qty": 1721.13,
+          "raw_moves_count": 4,
+          "done_moves": 3,
+          "consumption_mode": "flexible",
+          "location_src": "RF/Stock/Inventario Real",
+          "consumption_type": "SEPARATE"
+        },
+        {
+          "production": "RF/MO/CongTE1/00349",
+          "product": "[1.1] PROCESO CONGELADO TÚNEL ESTÁTICO 1",
+          "qty": 2956.21,
+          "raw_moves_count": 4,
+          "done_moves": 4,
+          "consumption_mode": "flexible",
+          "location_src": "RF/Stock/Camara 0°C REAL",
+          "consumption_type": "SEPARATE"
+        },
+        {
+          "production": "WH/RF/MOV/RETAIL/00874",
+          "product": "[4] Proceso Retail",
+          "qty": 5471.22,
+          "raw_moves_count": 7,
+          "done_moves": 6,
+          "consumption_mode": "flexible",
+          "location_src": "RF/Stock/Inventario Real",
+          "consumption_type": "SEPARATE"
+        },
+        {
+          "production": "WH/RF/MO/01057",
+          "product": "[2.2] PROCESO PTT",
+          "qty": 8800.0,
+          "raw_moves_count": 6,
+          "done_moves": 4,
+          "consumption_mode": "flexible",
+          "location_src": "RF/Stock/Inventario Real",
+          "consumption_type": "SEPARATE"
+        }
+      ],
+      "src_locations": {
+        "RF": 1,
+        "VLK/Stock": 1,
+        "VLK/Camara 2 -25°C/A4": 2,
+        "RF/Stock/Inventario Real": 15,
+        "Tránsito/Salida Túneles Estáticos": 2,
+        "RF/Stock/Camara 0°C REAL": 6,
+        "RF/Insumos/Bodega Insumos": 3
+      }
+    },
+    "family_classification": {
+      "INSUMOS_EMPAQUE": {
+        "count": 497,
+        "total_neg": -7246321.479999997,
+        "total_value": 1486725071.2987394
+      },
+      "QUIMICOS": {
+        "count": 5,
+        "total_neg": -1219.44,
+        "total_value": 545712.67
+      },
+      "MATERIAS_PRIMAS": {
+        "count": 497,
+        "total_neg": -5527790.079999998,
+        "total_value": 3752712377.050156
+      },
+      "PRODUCTO_PROCESO": {
+        "count": 806,
+        "total_neg": -1145325.1900000013,
+        "total_value": 519576616.01225024
+      },
+      "PRODUCTO_TERMINADO": {
+        "count": 0,
+        "total_neg": 0,
+        "total_value": 0
+      },
+      "BANDEJAS_RETORNABLES": {
+        "count": 7,
+        "total_neg": -19506.0,
+        "total_value": 17619270.81
+      },
+      "OTROS": {
+        "count": 188,
+        "total_neg": -229877.04,
+        "total_value": 205970889.36650005
+      }
+    },
+    "vendor_analysis": {
+      "affected_products": 191,
+      "origin_causes": {
+        "recepciones_incompletas": 1,
+        "devoluciones_mal_ejecutadas": 0,
+        "cancelaciones_posteriores": 5,
+        "backdating": 0,
+        "rutas_defectuosas": 0,
+        "otros": 0
+      },
+      "top_negative_products": [
+        {
+          "id": 322,
+          "name": "[500001-24] BOLSA AZUL 73X58X0.060-2024",
+          "qty": -596530.0
+        },
+        {
+          "id": 320,
+          "name": "[500002-24] ETIQUETAS 10x10 BLANCA-2024",
+          "qty": -547712.0
+        },
+        {
+          "id": 326,
+          "name": "[500007-25] Bandeja verde 45x34",
+          "qty": -444805.0
+        },
+        {
+          "id": 327,
+          "name": "[5000018] Bandeja IQF 60x40",
+          "qty": -375563.0
+        },
+        {
+          "id": 321,
+          "name": "[500000-24] CAJA EXPORTACIÓN 47x24.5x24.2-2024",
+          "qty": -357457.0
+        },
+        {
+          "id": 621,
+          "name": "[500079] BOLSA CREATIVE GOURMET BLUEBERRY 300g",
+          "qty": -274888.0
+        },
+        {
+          "id": 618,
+          "name": "[500081-24] ETIQUETA 50x100 BLANCA-2024",
+          "qty": -181255.0
+        },
+        {
+          "id": 319,
+          "name": "[500003-24] ETIQUETAS 10x15 BLANCA-2024",
+          "qty": -179602.0
+        },
+        {
+          "id": 324,
+          "name": "[500005-24] ETIQUETA 10x10 VERDE-2024",
+          "qty": -169884.0
+        },
+        {
+          "id": 328,
+          "name": "[500009-23-24] Bandeja 1/8 50x30-2024",
+          "qty": -110390.0
+        }
+      ]
+    },
+    "accounting_impact": {
+      "total_negative_value": 5983149937.207653,
+      "top_products_by_value": [
+        {
+          "id": 312,
+          "name": "AR S/V Conv. S/C Block Bins en Bins-2024",
+          "code": "300002-24",
+          "qty": -2969637.76,
+          "price": 849.397,
+          "value": 2522401404.43072
+        },
+        {
+          "id": 268,
+          "name": "AR S/V Org. S/C Block Bins en Bins-2024",
+          "code": "300004-24",
+          "qty": -2170885.2900000005,
+          "price": 392.0,
+          "value": 850987033.6800001
+        },
+        {
+          "id": 295,
+          "name": "FB MK Conv. S/C IQF Congelado en Bandeja-2024",
+          "code": "200029-24",
+          "qty": -110118.87999999999,
+          "price": 3229.1150000000002,
+          "value": 355586527.19120026
+        },
+        {
+          "id": 321,
+          "name": "CAJA EXPORTACIÓN 47x24.5x24.2-2024",
+          "code": "500000-24",
+          "qty": -518209.0,
+          "price": 599.0,
+          "value": 310407191.0
+        },
+        {
+          "id": 255,
+          "name": "FB MK Conv. S/C PSP 10 kg en Caja-2024",
+          "code": "200017-24",
+          "qty": -86687.31,
+          "price": 3379.669,
+          "value": 292974414.30038995
+        },
+        {
+          "id": 250,
+          "name": "AR HB Org. >12 mm PSP 13.61 kg en Caja-2024",
+          "code": "200012-24",
+          "qty": -160917.78000000003,
+          "price": 1562.301,
+          "value": 251402008.6117799
+        },
+        {
+          "id": 357,
+          "name": "FB WF Org. IQF en Bandeja-2024",
+          "code": "400025-24",
+          "qty": -63610.15,
+          "price": 2361.494,
+          "value": 150214987.56409994
+        },
+        {
+          "id": 392,
+          "name": "GUANTES DE NITRILO (ARCHIVAR)-2024",
+          "code": false,
+          "qty": -47610.0,
+          "price": 2748.69,
+          "value": 130865130.9
+        },
+        {
+          "id": 261,
+          "name": "FB MK Conv. S/C IQF A 10 kg en Caja-2024",
+          "code": "200023-24",
+          "qty": -26640.0,
+          "price": 3738.5570000000002,
+          "value": 99595158.48000002
+        },
+        {
+          "id": 428,
+          "name": "FB WF Conv. IQF en Bandeja-2024",
+          "code": "400027-24",
+          "qty": -38100.31999999999,
+          "price": 1916.829,
+          "value": 73031798.28528
+        },
+        {
+          "id": 311,
+          "name": "AR S/V Conv. S/C Block 13.61 kg en Caja-2024",
+          "code": "300001-24",
+          "qty": -169266.79999999987,
+          "price": 412.656,
+          "value": 69848960.62079997
+        },
+        {
+          "id": 322,
+          "name": "BOLSA AZUL 73X58X0.060-2024",
+          "code": "500001-24",
+          "qty": -750896.0,
+          "price": 89.0,
+          "value": 66829744.0
+        },
+        {
+          "id": 300,
+          "name": "AR HB Org. S/C IQF Congelado en Bandeja-2024",
+          "code": "200035-24",
+          "qty": -33373.1,
+          "price": 1704.503,
+          "value": 56884549.06930002
+        },
+        {
+          "id": 317,
+          "name": "AR HB Conv. S/C IQF Congelado en Bandeja-2024",
+          "code": "200031-24",
+          "qty": -35428.95,
+          "price": 1571.733,
+          "value": 55684849.87035001
+        },
+        {
+          "id": 438,
+          "name": "nousar!MASCARILLAS 3 PLIEGUES (CAJA DE 50 UN)-2024",
+          "code": "500062-24",
+          "qty": -51770.0,
+          "price": 974.522,
+          "value": 50451003.940000005
+        },
+        {
+          "id": 242,
+          "name": "AR HB Conv. >11 mm PSP 13.61 kg en Caja-2024",
+          "code": "200004-24",
+          "qty": -6934.48,
+          "price": 6999.9220000000005,
+          "value": 48540819.11056
+        },
+        {
+          "id": 327,
+          "name": "Bandeja IQF 60x40",
+          "code": "5000018",
+          "qty": -375563.0,
+          "price": 120.447,
+          "value": 45235436.661
+        },
+        {
+          "id": 249,
+          "name": "AR HB Org. <11 mm PSP 13.61 kg en Caja-2024",
+          "code": "200011-24",
+          "qty": -30486.4,
+          "price": 1408.699,
+          "value": 42946161.19359999
+        },
+        {
+          "id": 264,
+          "name": "FB WF Org. S/C IQF A 10 kg en Caja-2024",
+          "code": "200026-24",
+          "qty": -8800.0,
+          "price": 3570.0,
+          "value": 31416000.0
+        },
+        {
+          "id": 258,
+          "name": "FB WF Org. S/C PSP 10 kg en Caja-2024",
+          "code": "200020-24",
+          "qty": -11560.0,
+          "price": 2538.0950000000003,
+          "value": 29340378.200000003
+        }
+      ],
+      "negative_layers_count": 100,
+      "valuation_config": {
+        "ACTIVO": {
+          "valuation": "manual_periodic",
+          "cost_method": "standard",
+          "input_account": false,
+          "output_account": false,
+          "valuation_account": false
+        },
+        "ACTIVO / EQUIPOS COMPUTACIONALES": {
+          "valuation": "manual_periodic",
+          "cost_method": "standard",
+          "input_account": false,
+          "output_account": false,
+          "valuation_account": false
+        },
+        "ACTIVO / MAQUINARIA Y EQUIPOS": {
+          "valuation": "manual_periodic",
+          "cost_method": "standard",
+          "input_account": false,
+          "output_account": false,
+          "valuation_account": false
+        },
+        "ACTIVO / MUEBLES Y UTILES DE TRABAJO": {
+          "valuation": "manual_periodic",
+          "cost_method": "average",
+          "input_account": false,
+          "output_account": false,
+          "valuation_account": false
+        },
+        "ACTIVO FIJO": {
+          "valuation": "manual_periodic",
+          "cost_method": "standard",
+          "input_account": false,
+          "output_account": false,
+          "valuation_account": false
+        },
+        "All": {
+          "valuation": "manual_periodic",
+          "cost_method": "average",
+          "input_account": false,
+          "output_account": false,
+          "valuation_account": false
+        },
+        "All / Deliveries": {
+          "valuation": "manual_periodic",
+          "cost_method": "standard",
+          "input_account": false,
+          "output_account": false,
+          "valuation_account": false
+        },
+        "All / Expenses": {
+          "valuation": "manual_periodic",
+          "cost_method": "standard",
+          "input_account": [
+            82,
+            "210230 Facturas por Recibir"
+          ],
+          "output_account": [
+            29,
+            "11040108 EXISTENCIAS EN TRÁNSITO"
+          ],
+          "valuation_account": [
+            23,
+            "110610 Mercaderías"
+          ]
+        },
+        "All / Mantención": {
+          "valuation": "real_time",
+          "cost_method": "average",
+          "input_account": [
+            82,
+            "210230 Facturas por Recibir"
+          ],
+          "output_account": [
+            29,
+            "11040108 EXISTENCIAS EN TRÁNSITO"
+          ],
+          "valuation_account": [
+            23,
+            "110610 Mercaderías"
+          ]
+        },
+        "All / Saleable": {
+          "valuation": "manual_periodic",
+          "cost_method": "standard",
+          "input_account": [
+            82,
+            "210230 Facturas por Recibir"
+          ],
+          "output_account": [
+            29,
+            "11040108 EXISTENCIAS EN TRÁNSITO"
+          ],
+          "valuation_account": [
+            23,
+            "110610 Mercaderías"
+          ]
+        },
+        "BANDEJAS": {
+          "valuation": "manual_periodic",
+          "cost_method": "average",
+          "input_account": false,
+          "output_account": false,
+          "valuation_account": false
+        },
+        "BANDEJAS A PRODUCTOR": {
+          "valuation": "manual_periodic",
+          "cost_method": "standard",
+          "input_account": false,
+          "output_account": false,
+          "valuation_account": false
+        },
+        "CONSUMIBLES": {
+          "valuation": "manual_periodic",
+          "cost_method": "standard",
+          "input_account": false,
+          "output_account": false,
+          "valuation_account": false
+        },
+        "CONSUMIBLES / ART. CAFETERÍA Y ASEO": {
+          "valuation": "manual_periodic",
+          "cost_method": "average",
+          "input_account": false,
+          "output_account": false,
+          "valuation_account": false
+        },
+        "CONSUMIBLES / ART. DE COMPUTACIÓN": {
+          "valuation": "manual_periodic",
+          "cost_method": "standard",
+          "input_account": false,
+          "output_account": false,
+          "valuation_account": false
+        },
+        "CONSUMIBLES / ART. DE PAPELERÍA": {
+          "valuation": "manual_periodic",
+          "cost_method": "standard",
+          "input_account": false,
+          "output_account": false,
+          "valuation_account": false
+        },
+        "CONSUMIBLES / EPP": {
+          "valuation": "manual_periodic",
+          "cost_method": "standard",
+          "input_account": false,
+          "output_account": false,
+          "valuation_account": false
+        },
+        "CONSUMIBLES / HERRAMIENTAS DE TRABAJO": {
+          "valuation": "manual_periodic",
+          "cost_method": "standard",
+          "input_account": false,
+          "output_account": false,
+          "valuation_account": false
+        },
+        "CONSUMIBLES / INSUMOS DE LABORATORIO": {
+          "valuation": "manual_periodic",
+          "cost_method": "standard",
+          "input_account": false,
+          "output_account": false,
+          "valuation_account": false
+        },
+        "CONSUMIBLES / MAQUINARIA Y EQUIPOS": {
+          "valuation": "manual_periodic",
+          "cost_method": "standard",
+          "input_account": false,
+          "output_account": false,
+          "valuation_account": false
+        },
+        "CONSUMIBLES / OTROS": {
+          "valuation": "manual_periodic",
+          "cost_method": "standard",
+          "input_account": false,
+          "output_account": false,
+          "valuation_account": false
+        },
+        "CONSUMIBLES / PALETIZACIÓN": {
+          "valuation": "manual_periodic",
+          "cost_method": "standard",
+          "input_account": false,
+          "output_account": false,
+          "valuation_account": false
+        },
+        "Desecho Vegetal": {
+          "valuation": "manual_periodic",
+          "cost_method": "average",
+          "input_account": false,
+          "output_account": false,
+          "valuation_account": false
+        },
+        "ejemplods2": {
+          "valuation": "real_time",
+          "cost_method": "average",
+          "input_account": [
+            1350,
+            "21020106 FACTURAS POR RECIBIR"
+          ],
+          "output_account": [
+            29,
+            "11040108 EXISTENCIAS EN TRÁNSITO"
+          ],
+          "valuation_account": [
+            23,
+            "110610 Mercaderías"
+          ]
+        },
+        "HOG": {
+          "valuation": "manual_periodic",
+          "cost_method": "standard",
+          "input_account": false,
+          "output_account": false,
+          "valuation_account": false
+        },
+        "INVENTARIABLES": {
+          "valuation": "manual_periodic",
+          "cost_method": "standard",
+          "input_account": false,
+          "output_account": false,
+          "valuation_account": false
+        },
+        "INVENTARIABLES / BODEGA QUÍMICOS": {
+          "valuation": "real_time",
+          "cost_method": "average",
+          "input_account": [
+            1350,
+            "21020106 FACTURAS POR RECIBIR"
+          ],
+          "output_account": [
+            1457,
+            "52020113 INSUMOS DE LIMPIEZA PROCESOS"
+          ],
+          "valuation_account": [
+            1893,
+            "11040109 INSUMOS DE LIMPIEZA"
+          ]
+        },
+        "INVENTARIABLES / EPP": {
+          "valuation": "real_time",
+          "cost_method": "average",
+          "input_account": [
+            1350,
+            "21020106 FACTURAS POR RECIBIR"
+          ],
+          "output_account": [
+            1504,
+            "52060204 ROPA DE TRABAJO E IMPEMENTOS DE SEGURIDAD EPP"
+          ],
+          "valuation_account": [
+            1702,
+            "11040107 EPP Y OTROS INSUMOS"
+          ]
+        },
+        "INVENTARIABLES / INSUMOS DE CLIENTES": {
+          "valuation": "manual_periodic",
+          "cost_method": "standard",
+          "input_account": false,
+          "output_account": false,
+          "valuation_account": false
+        },
+        "INVENTARIABLES / INSUMOS DE ENVÍO DE MUESTRAS": {
+          "valuation": "real_time",
+          "cost_method": "average",
+          "input_account": [
+            1350,
+            "21020106 FACTURAS POR RECIBIR"
+          ],
+          "output_account": [
+            1446,
+            "62020102 ENVÍOS DE MUESTRAS"
+          ],
+          "valuation_account": [
+            576,
+            "11040106 OTROS MATERIALES E INSUMOS"
+          ]
+        },
+        "INVENTARIABLES / INSUMOS DE MANTENCIÓN": {
+          "valuation": "real_time",
+          "cost_method": "average",
+          "input_account": [
+            1350,
+            "21020106 FACTURAS POR RECIBIR"
+          ],
+          "output_account": [
+            1481,
+            "52040201 MANTENCION MAQUINARIAS Y EQUIPOS OPERATIVOS"
+          ],
+          "valuation_account": [
+            576,
+            "11040106 OTROS MATERIALES E INSUMOS"
+          ]
+        },
+        "INVENTARIABLES / INSUMOS DE ORDENES DE PRODUCCIÓN": {
+          "valuation": "real_time",
+          "cost_method": "average",
+          "input_account": [
+            1350,
+            "21020106 FACTURAS POR RECIBIR"
+          ],
+          "output_account": [
+            29,
+            "11040108 EXISTENCIAS EN TRÁNSITO"
+          ],
+          "valuation_account": [
+            576,
+            "11040106 OTROS MATERIALES E INSUMOS"
+          ]
+        },
+        "INVENTARIABLES / INSUMOS DE PRODUCCIÓN": {
+          "valuation": "real_time",
+          "cost_method": "average",
+          "input_account": [
+            1350,
+            "21020106 FACTURAS POR RECIBIR"
+          ],
+          "output_account": [
+            29,
+            "11040108 EXISTENCIAS EN TRÁNSITO"
+          ],
+          "valuation_account": [
+            578,
+            "11040102 INSUMOS PRODUCCION"
+          ]
+        },
+        "INVENTARIABLES / INSUMOS DE PRODUCCIÓN LINEA CHOCOLATE": {
+          "valuation": "real_time",
+          "cost_method": "average",
+          "input_account": [
+            1350,
+            "21020106 FACTURAS POR RECIBIR"
+          ],
+          "output_account": [
+            29,
+            "11040108 EXISTENCIAS EN TRÁNSITO"
+          ],
+          "valuation_account": [
+            578,
+            "11040102 INSUMOS PRODUCCION"
+          ]
+        },
+        "INVENTARIABLES / INSUMOS LIMPIEZA PROCESO": {
+          "valuation": "real_time",
+          "cost_method": "average",
+          "input_account": [
+            1350,
+            "21020106 FACTURAS POR RECIBIR"
+          ],
+          "output_account": [
+            1457,
+            "52020113 INSUMOS DE LIMPIEZA PROCESOS"
+          ],
+          "valuation_account": [
+            1893,
+            "11040109 INSUMOS DE LIMPIEZA"
+          ]
+        },
+        "INVENTARIABLES / INSUMOS PALETIZACION": {
+          "valuation": "real_time",
+          "cost_method": "average",
+          "input_account": [
+            1350,
+            "21020106 FACTURAS POR RECIBIR"
+          ],
+          "output_account": [
+            1458,
+            "52020114 INSUMOS DE PALETIZACION"
+          ],
+          "valuation_account": [
+            576,
+            "11040106 OTROS MATERIALES E INSUMOS"
+          ]
+        },
+        "INVENTARIABLES / OTROS": {
+          "valuation": "real_time",
+          "cost_method": "average",
+          "input_account": [
+            1350,
+            "21020106 FACTURAS POR RECIBIR"
+          ],
+          "output_account": [
+            1455,
+            "52020111 OTROS MATERIALES E INSUMOS DE PRODUCCIÓN"
+          ],
+          "valuation_account": [
+            576,
+            "11040106 OTROS MATERIALES E INSUMOS"
+          ]
+        },
+        "OTROS": {
+          "valuation": "manual_periodic",
+          "cost_method": "standard",
+          "input_account": [
+            82,
+            "210230 Facturas por Recibir"
+          ],
+          "output_account": [
+            29,
+            "11040108 EXISTENCIAS EN TRÁNSITO"
+          ],
+          "valuation_account": [
+            23,
+            "110610 Mercaderías"
+          ]
+        },
+        "PROCESOS": {
+          "valuation": "manual_periodic",
+          "cost_method": "standard",
+          "input_account": false,
+          "output_account": false,
+          "valuation_account": false
+        },
+        "PROCESOS / CONSUMO": {
+          "valuation": "real_time",
+          "cost_method": "standard",
+          "input_account": [
+            82,
+            "210230 Facturas por Recibir"
+          ],
+          "output_account": [
+            1455,
+            "52020111 OTROS MATERIALES E INSUMOS DE PRODUCCIÓN"
+          ],
+          "valuation_account": [
+            576,
+            "11040106 OTROS MATERIALES E INSUMOS"
+          ]
+        },
+        "PROCESOS / PROCESO": {
+          "valuation": "manual_periodic",
+          "cost_method": "average",
+          "input_account": false,
+          "output_account": false,
+          "valuation_account": false
+        },
+        "PRODUCTOS": {
+          "valuation": "manual_periodic",
+          "cost_method": "standard",
+          "input_account": false,
+          "output_account": false,
+          "valuation_account": false
+        },
+        "PRODUCTOS / MERMA DE PROCESOS": {
+          "valuation": "real_time",
+          "cost_method": "average",
+          "input_account": [
+            1350,
+            "21020106 FACTURAS POR RECIBIR"
+          ],
+          "output_account": [
+            29,
+            "11040108 EXISTENCIAS EN TRÁNSITO"
+          ],
+          "valuation_account": [
+            1720,
+            "11040103 MERMA DE PROCESOS"
+          ]
+        },
+        "PRODUCTOS / MP": {
+          "valuation": "real_time",
+          "cost_method": "average",
+          "input_account": [
+            1351,
+            "21020107 FACTURAS POR RECIBIR PRODUCTORES"
+          ],
+          "output_account": [
+            29,
+            "11040108 EXISTENCIAS EN TRÁNSITO"
+          ],
+          "valuation_account": [
+            315,
+            "11040101 MATERIAS PRIMAS"
+          ]
+        },
+        "PRODUCTOS / MP IQF": {
+          "valuation": "real_time",
+          "cost_method": "average",
+          "input_account": [
+            1351,
+            "21020107 FACTURAS POR RECIBIR PRODUCTORES"
+          ],
+          "output_account": [
+            29,
+            "11040108 EXISTENCIAS EN TRÁNSITO"
+          ],
+          "valuation_account": [
+            579,
+            "11040104 PRODUCTOS EN PROCESOS"
+          ]
+        },
+        "PRODUCTOS / PSP": {
+          "valuation": "real_time",
+          "cost_method": "average",
+          "input_account": [
+            1350,
+            "21020106 FACTURAS POR RECIBIR"
+          ],
+          "output_account": [
+            29,
+            "11040108 EXISTENCIAS EN TRÁNSITO"
+          ],
+          "valuation_account": [
+            579,
+            "11040104 PRODUCTOS EN PROCESOS"
+          ]
+        },
+        "PRODUCTOS / PTT": {
+          "valuation": "real_time",
+          "cost_method": "average",
+          "input_account": [
+            1350,
+            "21020106 FACTURAS POR RECIBIR"
+          ],
+          "output_account": [
+            29,
+            "11040108 EXISTENCIAS EN TRÁNSITO"
+          ],
+          "valuation_account": [
+            580,
+            "11040105 PRODUCTOS TERMINADOS"
+          ]
+        },
+        "PRODUCTOS / RETAIL": {
+          "valuation": "real_time",
+          "cost_method": "average",
+          "input_account": [
+            1350,
+            "21020106 FACTURAS POR RECIBIR"
+          ],
+          "output_account": [
+            29,
+            "11040108 EXISTENCIAS EN TRÁNSITO"
+          ],
+          "valuation_account": [
+            580,
+            "11040105 PRODUCTOS TERMINADOS"
+          ]
+        },
+        "PRODUCTOS / SUBPRODUCTO": {
+          "valuation": "real_time",
+          "cost_method": "average",
+          "input_account": [
+            1350,
+            "21020106 FACTURAS POR RECIBIR"
+          ],
+          "output_account": [
+            29,
+            "11040108 EXISTENCIAS EN TRÁNSITO"
+          ],
+          "valuation_account": [
+            580,
+            "11040105 PRODUCTOS TERMINADOS"
+          ]
+        },
+        "PROVISIÓN": {
+          "valuation": "manual_periodic",
+          "cost_method": "standard",
+          "input_account": false,
+          "output_account": false,
+          "valuation_account": false
+        },
+        "SERVICIOS": {
+          "valuation": "manual_periodic",
+          "cost_method": "standard",
+          "input_account": [
+            82,
+            "210230 Facturas por Recibir"
+          ],
+          "output_account": [
+            29,
+            "11040108 EXISTENCIAS EN TRÁNSITO"
+          ],
+          "valuation_account": [
+            23,
+            "110610 Mercaderías"
+          ]
+        },
+        "SERVICIOS / COSTOS EN DESTINO": {
+          "valuation": "manual_periodic",
+          "cost_method": "standard",
+          "input_account": false,
+          "output_account": false,
+          "valuation_account": false
+        }
+      }
+    },
+    "rf_insumos_detail": {
+      "locations": [
+        {
+          "id": 5474,
+          "name": "Insumos",
+          "complete_name": "RF/Insumos",
+          "usage": "internal",
+          "location_id": [
+            7,
+            "RF"
+          ]
+        },
+        {
+          "id": 24,
+          "name": "Bodega Insumos",
+          "complete_name": "RF/Insumos/Bodega Insumos",
+          "usage": "internal",
+          "location_id": [
+            5474,
+            "RF/Insumos"
+          ]
+        },
+        {
+          "id": 8293,
+          "name": "BINA0101",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0101",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8294,
+          "name": "BINA0102",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0102",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8295,
+          "name": "BINA0103",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0103",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8296,
+          "name": "BINA0104",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0104",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8297,
+          "name": "BINA0105",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0105",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8298,
+          "name": "BINA0106",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0106",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8299,
+          "name": "BINA0107",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0107",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8300,
+          "name": "BINA0108",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0108",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8301,
+          "name": "BINA0109",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0109",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8302,
+          "name": "BINA0110",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0110",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8303,
+          "name": "BINA0111",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0111",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8304,
+          "name": "BINA0112",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0112",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8305,
+          "name": "BINA0113",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0113",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8306,
+          "name": "BINA0114",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0114",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8307,
+          "name": "BINA0115",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0115",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8308,
+          "name": "BINA0116",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0116",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8309,
+          "name": "BINA0117",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0117",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8311,
+          "name": "BINA0201",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0201",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8312,
+          "name": "BINA0202",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0202",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8313,
+          "name": "BINA0203",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0203",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8314,
+          "name": "BINA0204",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0204",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8315,
+          "name": "BINA0205",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0205",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8316,
+          "name": "BINA0206",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0206",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8317,
+          "name": "BINA0207",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0207",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8318,
+          "name": "BINA0208",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0208",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8319,
+          "name": "BINA0209",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0209",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8320,
+          "name": "BINA0210",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0210",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8321,
+          "name": "BINA0211",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0211",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8322,
+          "name": "BINA0212",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0212",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8323,
+          "name": "BINA0213",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0213",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8324,
+          "name": "BINA0214",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0214",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8325,
+          "name": "BINA0215",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0215",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8326,
+          "name": "BINA0216",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0216",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8327,
+          "name": "BINA0217",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0217",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8328,
+          "name": "BINA0218",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0218",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8329,
+          "name": "BINA0301",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0301",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8330,
+          "name": "BINA0302",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0302",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8331,
+          "name": "BINA0303",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0303",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8332,
+          "name": "BINA0304",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0304",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8333,
+          "name": "BINA0305",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0305",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8334,
+          "name": "BINA0306",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0306",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8335,
+          "name": "BINA0307",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0307",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8336,
+          "name": "BINA0308",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0308",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8337,
+          "name": "BINA0309",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0309",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8338,
+          "name": "BINA0310",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0310",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8339,
+          "name": "BINA0311",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0311",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8340,
+          "name": "BINA0312",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0312",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8341,
+          "name": "BINA0313",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0313",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8342,
+          "name": "BINA0314",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0314",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8343,
+          "name": "BINA0315",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0315",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8344,
+          "name": "BINA0316",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0316",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8345,
+          "name": "BINA0317",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0317",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8346,
+          "name": "BINA0318",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINA0318",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8347,
+          "name": "BINB0101",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINB0101",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8348,
+          "name": "BINB0102",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINB0102",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8349,
+          "name": "BINB0103",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINB0103",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8350,
+          "name": "BINB0104",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINB0104",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8351,
+          "name": "BINB0105",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINB0105",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8352,
+          "name": "BINB0106",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINB0106",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8353,
+          "name": "BINB0107",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINB0107",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8354,
+          "name": "BINB0108",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINB0108",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8355,
+          "name": "BINB0109",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINB0109",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8356,
+          "name": "BINB0110",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINB0110",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8357,
+          "name": "BINB0111",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINB0111",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8358,
+          "name": "BINB0112",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINB0112",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8359,
+          "name": "BINB0113",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINB0113",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8360,
+          "name": "BINB0114",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINB0114",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8361,
+          "name": "BINB0115",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINB0115",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8362,
+          "name": "BINB0116",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINB0116",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8363,
+          "name": "BINB0201",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINB0201",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8364,
+          "name": "BINB0202",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINB0202",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8365,
+          "name": "BINB0203",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINB0203",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8366,
+          "name": "BINB0204",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINB0204",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8367,
+          "name": "BINB0205",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINB0205",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8368,
+          "name": "BINB0206",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINB0206",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8369,
+          "name": "BINB0207",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINB0207",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8370,
+          "name": "BINB0208",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINB0208",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8371,
+          "name": "BINB0209",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINB0209",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8372,
+          "name": "BINB0210",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINB0210",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8373,
+          "name": "BINB0211",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINB0211",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8374,
+          "name": "BINB0212",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINB0212",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8375,
+          "name": "BINB0213",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINB0213",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8376,
+          "name": "BINB0214",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINB0214",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8377,
+          "name": "BINB0215",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINB0215",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8378,
+          "name": "BINB0216",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINB0216",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8379,
+          "name": "BINB0301",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINB0301",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8380,
+          "name": "BINB0302",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINB0302",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8381,
+          "name": "BINB0303",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINB0303",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8382,
+          "name": "BINB0304",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINB0304",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8383,
+          "name": "BINB0305",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINB0305",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8384,
+          "name": "BINB0306",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINB0306",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8385,
+          "name": "BINB0307",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINB0307",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8386,
+          "name": "BINB0308",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINB0308",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8387,
+          "name": "BINB0309",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINB0309",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8388,
+          "name": "BINB0310",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINB0310",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8389,
+          "name": "BINB0311",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINB0311",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8390,
+          "name": "BINB0312",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINB0312",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        },
+        {
+          "id": 8391,
+          "name": "BINB0313",
+          "complete_name": "RF/Insumos/Bodega Insumos/BINB0313",
+          "usage": "internal",
+          "location_id": [
+            24,
+            "RF/Insumos/Bodega Insumos"
+          ]
+        }
+      ],
+      "total_quants": 696,
+      "positive_quants": 447,
+      "negative_quants": 249,
+      "total_positive": 6339622.2005,
+      "total_negative": -1836044.57,
+      "unique_products": 296,
+      "by_sublocation": {
+        "RF/Insumos/Bodega Insumos": {
+          "pos": 6325622.2005,
+          "neg": -1020732.9099999999,
+          "count": 570
+        },
+        "RF/Insumos": {
+          "pos": 14000.0,
+          "neg": -814336.66,
+          "count": 123
+        },
+        "RF/Insumos/Bodega Insumos/BINA0101": {
+          "pos": 0,
+          "neg": -975.0,
+          "count": 3
+        }
+      }
+    }
+  }
+}

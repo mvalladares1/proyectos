@@ -1,0 +1,30 @@
+{
+  "oc": "OC13708",
+  "fecha_ejecucion": "2026-03-11 12:46:54",
+  "cambios": [
+    {
+      "tipo": "purchase.order.line",
+      "id": 22621,
+      "precio_antes": 3400.0,
+      "precio_despues": 3300.0,
+      "cantidad_antes": 2630.0,
+      "cantidad_despues": 2630.0
+    },
+    {
+      "tipo": "stock.move",
+      "id": 175076,
+      "precio_antes": 3400.0,
+      "precio_despues": 3300.0
+    },
+    {
+      "tipo": "stock.valuation.layer",
+      "id": 100523,
+      "costo_antes": 3400.0,
+      "costo_despues": 3300.0,
+      "valor_antes": 8816948.0,
+      "valor_despues": 8557626.0
+    }
+  ],
+  "total_antes": 10640980.0,
+  "total_despues": 10328010.0
+}

@@ -1,0 +1,111 @@
+{
+  "fecha_verificacion": "2026-03-11 12:47:22",
+  "ocs": {
+    "OC12288": {
+      "estado": "purchase",
+      "total": 1182.6,
+      "moneda": "USD",
+      "facturacion": "invoiced",
+      "problemas": []
+    },
+    "OC11401": {
+      "estado": "purchase",
+      "total": 9017.6,
+      "moneda": "USD",
+      "facturacion": "invoiced",
+      "problemas": [
+        {
+          "tipo": "LAYER_COSTO_INCORRECTO",
+          "layer_id": 88988,
+          "costo_actual": 2.0,
+          "costo_esperado": 1.6
+        },
+        {
+          "tipo": "LAYER_COSTO_INCORRECTO",
+          "layer_id": 88989,
+          "costo_actual": 2.0,
+          "costo_esperado": 1.6
+        }
+      ]
+    },
+    "OC12902": {
+      "estado": "purchase",
+      "total": 17922554.0,
+      "moneda": "CLP",
+      "facturacion": "invoiced",
+      "problemas": []
+    },
+    "OC09581": {
+      "estado": "purchase",
+      "total": 2043.3,
+      "moneda": "USD",
+      "facturacion": "invoiced",
+      "problemas": [
+        {
+          "tipo": "LAYER_COSTO_INCORRECTO",
+          "layer_id": 81377,
+          "costo_actual": 2.0,
+          "costo_esperado": 2.3
+        }
+      ]
+    },
+    "OC12755": {
+      "estado": "purchase",
+      "total": 329582.0,
+      "moneda": "CLP",
+      "facturacion": "invoiced",
+      "problemas": []
+    },
+    "OC13491": {
+      "estado": "purchase",
+      "total": 19539810.0,
+      "moneda": "CLP",
+      "facturacion": "invoiced",
+      "problemas": []
+    },
+    "OC13530": {
+      "estado": "purchase",
+      "total": 17930918.0,
+      "moneda": "CLP",
+      "facturacion": "invoiced",
+      "problemas": []
+    },
+    "OC13596": {
+      "estado": "purchase",
+      "total": 12190036.0,
+      "moneda": "CLP",
+      "facturacion": "invoiced",
+      "problemas": []
+    },
+    "OC13708": {
+      "estado": "purchase",
+      "total": 10328010.0,
+      "moneda": "CLP",
+      "facturacion": "to invoice",
+      "problemas": []
+    }
+  },
+  "problemas": [
+    {
+      "oc": "OC11401",
+      "tipo": "LAYER_COSTO_INCORRECTO",
+      "layer_id": 88988,
+      "costo_actual": 2.0,
+      "costo_esperado": 1.6
+    },
+    {
+      "oc": "OC11401",
+      "tipo": "LAYER_COSTO_INCORRECTO",
+      "layer_id": 88989,
+      "costo_actual": 2.0,
+      "costo_esperado": 1.6
+    },
+    {
+      "oc": "OC09581",
+      "tipo": "LAYER_COSTO_INCORRECTO",
+      "layer_id": 81377,
+      "costo_actual": 2.0,
+      "costo_esperado": 2.3
+    }
+  ]
+}

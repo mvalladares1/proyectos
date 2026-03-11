@@ -122,6 +122,22 @@ class CurrencyService:
         return amount_usd * rate
     
     @classmethod
+    def convert_clp_to_usd(cls, amount_clp: float) -> float:
+        """
+        Convierte un monto de CLP a USD.
+        
+        Args:
+            amount_clp: Monto en pesos chilenos
+            
+        Returns:
+            float: Monto equivalente en dólares estadounidenses
+        """
+        rate = cls.get_usd_to_clp_rate()
+        if rate == 0:
+            return 0
+        return amount_clp / rate
+    
+    @classmethod
     def get_uf_to_clp_rate(cls) -> float:
         """
         Obtiene el tipo de cambio UF → CLP.
