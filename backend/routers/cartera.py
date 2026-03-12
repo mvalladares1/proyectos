@@ -120,16 +120,10 @@ async def obtener_antiguedad_cartera(
             for p in partners:
                 cat_ids = p.get('category_id', [])
                 if cat_ids:
-                    # Tomar primera categoría relevante
-                    for cid in cat_ids:
-                        nombre = cat_nombres.get(cid, '')
-                        if nombre in ['Productor', 'Proveedor', 'Transportista']:
-                            categorias_por_partner[p['id']] = nombre
-                            break
-                    if p['id'] not in categorias_por_partner:
-                        categorias_por_partner[p['id']] = cat_nombres.get(cat_ids[0], 'Otros')
+                    # Usar la primera categoría disponible
+                    categorias_por_partner[p['id']] = cat_nombres.get(cat_ids[0], 'Sin Categoría')
                 else:
-                    categorias_por_partner[p['id']] = 'Otros'
+                    categorias_por_partner[p['id']] = 'Sin Categoría'
         
         # Estructura CxP por categoría
         cxp_por_categoria = defaultdict(lambda: {
@@ -213,17 +207,14 @@ async def obtener_antiguedad_cartera(
             
             cxp_por_categoria[categoria]["total"] += monto
         
-        # Formatear CxP
-        cxp_resultado = []
-        orden_categorias = ['Productor', 'Proveedor', 'Transportista', 'Otros']
-        
-        for cat in orden_categorias:
-            if cat in cxp_por_categoria:
-                data = cxp_por_categoria[cat]
-                cxp_resultado.append({
-                    "categoria": cat,
-                    **data
-                })
+        # Formatear CxP - ordenar por total descendente
+        cxp_resultado = [
+            {"categoria": cat, **data}
+            for cat, data in sorted(
+                cxp_por_categoria.items(),
+                key=lambda x: -x[1]["total"]
+            )
+        ]
         
         # Total general CxP
         total_cxp = sum(d["total"] for d in cxp_resultado) + remuneraciones + bancos
