@@ -128,7 +128,9 @@ class RealProyectadoCalculator:
         
         ESTRUCTURA JERÁRQUICA:
         - Nivel 2: Por estado (Pagadas, Parciales, No Pagadas)
-        - Nivel 3: Por proveedor
+        - Nivel 3: Cat IFRS 3
+        - Nivel 4: Categoría de contacto
+        - Nivel 5: Proveedor
         """
         try:
             # PASO 0.5: Ampliar fecha_inicio hacia atrás para capturar facturas pendientes 
@@ -190,7 +192,7 @@ class RealProyectadoCalculator:
                     'nombre': '✅ Facturas Pagadas',
                     'monto': 0.0,
                     'montos_por_mes': defaultdict(float),
-                    'categorias': {},  # Nivel 3: Categorías de contacto
+                    'ifrs3': {},
                     'es_cuenta_cxp': True,
                     'orden': 1
                 },
@@ -199,7 +201,7 @@ class RealProyectadoCalculator:
                     'nombre': '⏳ Facturas Parcialmente Pagadas',
                     'monto': 0.0,
                     'montos_por_mes': defaultdict(float),
-                    'categorias': {},  # Nivel 3: Categorías de contacto
+                    'ifrs3': {},
                     'es_cuenta_cxp': True,
                     'orden': 2
                 },
@@ -208,7 +210,7 @@ class RealProyectadoCalculator:
                     'nombre': '❌ Facturas No Pagadas',
                     'monto': 0.0,
                     'montos_por_mes': defaultdict(float),
-                    'categorias': {},  # Nivel 3: Categorías de contacto
+                    'ifrs3': {},
                     'es_cuenta_cxp': True,
                     'orden': 3
                 },
@@ -217,7 +219,7 @@ class RealProyectadoCalculator:
                     'nombre': '📦 Facturas Proyectadas (Modulo Compras)',
                     'monto': 0.0,
                     'montos_por_mes': defaultdict(float),
-                    'categorias': {},
+                    'ifrs3': {},
                     'es_cuenta_cxp': True,
                     'orden': 4
                 },
@@ -226,7 +228,7 @@ class RealProyectadoCalculator:
                     'nombre': '📋 Facturas Proyectadas (Modulo Contabilidad)',
                     'monto': 0.0,
                     'montos_por_mes': defaultdict(float),
-                    'categorias': {},
+                    'ifrs3': {},
                     'es_cuenta_cxp': True,
                     'orden': 5
                 }
@@ -237,9 +239,29 @@ class RealProyectadoCalculator:
             todas_lineas = self.odoo.search_read(
                 'account.move.line',
                 [['move_id', 'in', factura_ids]],
-                ['id', 'move_id', 'matching_number', 'date', 'debit', 'credit'],
+                ['id', 'move_id', 'matching_number', 'date', 'debit', 'credit', 'account_id', 'balance', 'display_type', 'tax_line_id'],
                 limit=50000
             )
+
+            account_ids_lineas = set()
+            for linea in todas_lineas:
+                account_data = linea.get('account_id')
+                account_id = account_data[0] if isinstance(account_data, (list, tuple)) and len(account_data) > 0 else account_data
+                if account_id:
+                    account_ids_lineas.add(account_id)
+
+            ifrs3_por_account = {}
+            if account_ids_lineas:
+                try:
+                    cuentas_data = self.odoo.read(
+                        'account.account',
+                        list(account_ids_lineas),
+                        ['id', 'x_studio_cat_ifrs_3']
+                    )
+                    for cuenta in cuentas_data:
+                        ifrs3_por_account[cuenta['id']] = (cuenta.get('x_studio_cat_ifrs_3') or '').strip() or 'Sin IFRS 3'
+                except Exception:
+                    ifrs3_por_account = {}
             
             # OPTIMIZACIÓN: Agrupar líneas por factura usando dict comprehension
             lineas_por_factura = defaultdict(list)
@@ -432,40 +454,75 @@ class RealProyectadoCalculator:
                 else:
                     acumulaciones.append((estado_key, monto_real, monto_proyectado, periodo_real, periodo_proyectado))
                 
+                ponderadores_ifrs3 = defaultdict(float)
+                for linea in lineas:
+                    if linea.get('display_type') == 'payment_term':
+                        continue
+                    if linea.get('tax_line_id'):
+                        continue
+
+                    account_data = linea.get('account_id')
+                    account_id = account_data[0] if isinstance(account_data, (list, tuple)) and len(account_data) > 0 else account_data
+                    ifrs3_label = (ifrs3_por_account.get(account_id) or '').strip() or 'Sin IFRS 3'
+                    balance_linea = abs(float(linea.get('balance') or 0.0))
+                    ponderadores_ifrs3[ifrs3_label] += balance_linea if balance_linea > 0 else 1.0
+
+                if not ponderadores_ifrs3:
+                    ponderadores_ifrs3['Sin IFRS 3'] = 1.0
+
+                total_peso_ifrs3 = sum(ponderadores_ifrs3.values()) or 1.0
+
                 for acum_estado_key, acum_real, acum_proy, acum_per_real, acum_per_proy in acumulaciones:
                     acum_estado = estados[acum_estado_key]
-                    acum_monto_total = acum_real + acum_proy
-                    
-                    # Nivel 3: Agrupar por categoría de contacto
-                    if categoria_nombre not in acum_estado['categorias']:
-                        acum_estado['categorias'][categoria_nombre] = {
-                            'nombre': categoria_nombre,
-                            'monto': 0.0,
-                            'montos_por_mes': defaultdict(float),
-                            'proveedores': {}
-                        }
-                    
-                    categoria = acum_estado['categorias'][categoria_nombre]
-                    categoria['monto'] += acum_monto_total
-                    if acum_per_real:
-                        categoria['montos_por_mes'][acum_per_real] += acum_real
-                    if acum_per_proy:
-                        categoria['montos_por_mes'][acum_per_proy] += acum_proy
-                    
-                    # Nivel 4: Agrupar por proveedor individual
-                    if partner_name not in categoria['proveedores']:
-                        categoria['proveedores'][partner_name] = {
-                            'nombre': partner_name[:50],
-                            'monto': 0.0,
-                            'montos_por_mes': defaultdict(float)
-                        }
-                    
-                    proveedor = categoria['proveedores'][partner_name]
-                    proveedor['monto'] += acum_monto_total
-                    if acum_per_real:
-                        proveedor['montos_por_mes'][acum_per_real] += acum_real
-                    if acum_per_proy:
-                        proveedor['montos_por_mes'][acum_per_proy] += acum_proy
+                    for ifrs3_label, peso_ifrs3 in ponderadores_ifrs3.items():
+                        proporcion_ifrs3 = peso_ifrs3 / total_peso_ifrs3
+                        real_parcial = acum_real * proporcion_ifrs3
+                        proy_parcial = acum_proy * proporcion_ifrs3
+                        acum_monto_total = real_parcial + proy_parcial
+
+                        if ifrs3_label not in acum_estado['ifrs3']:
+                            acum_estado['ifrs3'][ifrs3_label] = {
+                                'nombre': ifrs3_label,
+                                'monto': 0.0,
+                                'montos_por_mes': defaultdict(float),
+                                'categorias': {}
+                            }
+
+                        ifrs3_entry = acum_estado['ifrs3'][ifrs3_label]
+                        ifrs3_entry['monto'] += acum_monto_total
+                        if acum_per_real:
+                            ifrs3_entry['montos_por_mes'][acum_per_real] += real_parcial
+                        if acum_per_proy:
+                            ifrs3_entry['montos_por_mes'][acum_per_proy] += proy_parcial
+
+                        if categoria_nombre not in ifrs3_entry['categorias']:
+                            ifrs3_entry['categorias'][categoria_nombre] = {
+                                'nombre': categoria_nombre,
+                                'monto': 0.0,
+                                'montos_por_mes': defaultdict(float),
+                                'proveedores': {}
+                            }
+
+                        categoria = ifrs3_entry['categorias'][categoria_nombre]
+                        categoria['monto'] += acum_monto_total
+                        if acum_per_real:
+                            categoria['montos_por_mes'][acum_per_real] += real_parcial
+                        if acum_per_proy:
+                            categoria['montos_por_mes'][acum_per_proy] += proy_parcial
+
+                        if partner_name not in categoria['proveedores']:
+                            categoria['proveedores'][partner_name] = {
+                                'nombre': partner_name[:50],
+                                'monto': 0.0,
+                                'montos_por_mes': defaultdict(float)
+                            }
+
+                        proveedor = categoria['proveedores'][partner_name]
+                        proveedor['monto'] += acum_monto_total
+                        if acum_per_real:
+                            proveedor['montos_por_mes'][acum_per_real] += real_parcial
+                        if acum_per_proy:
+                            proveedor['montos_por_mes'][acum_per_proy] += proy_parcial
 
             # PASO 4: Agregar proyecciones desde Módulo Compras (purchase.order)
             # Incluir OCs con facturas parciales también
@@ -1004,15 +1061,28 @@ class RealProyectadoCalculator:
                     estado['monto'] += monto_parcial
                     estado['montos_por_mes'][periodo_proyectado] += monto_parcial
 
-                    if categoria_ifrs3 not in estado['categorias']:
-                        estado['categorias'][categoria_ifrs3] = {
+                    if categoria_ifrs3 not in estado['ifrs3']:
+                        estado['ifrs3'][categoria_ifrs3] = {
                             'nombre': categoria_ifrs3,
+                            'monto': 0.0,
+                            'montos_por_mes': defaultdict(float),
+                            'categorias': {}
+                        }
+
+                    ifrs3_entry = estado['ifrs3'][categoria_ifrs3]
+                    ifrs3_entry['monto'] += monto_parcial
+                    ifrs3_entry['montos_por_mes'][periodo_proyectado] += monto_parcial
+
+                    categoria_label = 'Sin Categoría'
+                    if categoria_label not in ifrs3_entry['categorias']:
+                        ifrs3_entry['categorias'][categoria_label] = {
+                            'nombre': categoria_label,
                             'monto': 0.0,
                             'montos_por_mes': defaultdict(float),
                             'proveedores': {}
                         }
 
-                    categoria = estado['categorias'][categoria_ifrs3]
+                    categoria = ifrs3_entry['categorias'][categoria_label]
                     categoria['monto'] += monto_parcial
                     categoria['montos_por_mes'][periodo_proyectado] += monto_parcial
 
@@ -1044,44 +1114,55 @@ class RealProyectadoCalculator:
                 # Nivel 2: ESTADO como cuenta
                 etiquetas_list = []
                 
-                # Ordenar categorías alfabéticamente
-                categorias_ordenadas = sorted(
-                    estado['categorias'].items(),
+                # Ordenar IFRS 3 alfabéticamente
+                ifrs3_ordenados = sorted(
+                    estado['ifrs3'].items(),
                     key=lambda x: self._texto_orden_alfabetico(x[0])
                 )
                 
-                for categoria_nombre, categoria_data in categorias_ordenadas:
-                    # Nivel 3: CATEGORÍA como etiqueta EXPANDIBLE con sub_etiquetas
-                    # Ordenar proveedores alfabéticamente
-                    proveedores_ordenados = sorted(
-                        categoria_data['proveedores'].items(),
+                for ifrs3_nombre, ifrs3_data in ifrs3_ordenados:
+                    categorias_ordenadas = sorted(
+                        ifrs3_data['categorias'].items(),
                         key=lambda x: self._texto_orden_alfabetico(x[0])
                     )
-                    
-                    # Nivel 4: PROVEEDORES como sub_etiquetas anidadas (sin límite)
-                    sub_etiquetas_proveedores = []
-                    
-                    for prov_nombre, prov_data in proveedores_ordenados:
-                        prov_entry = {
-                            'nombre': prov_data['nombre'],
-                            'monto': prov_data['monto'],
-                            'montos_por_mes': dict(prov_data['montos_por_mes']),
-                            'tipo': 'proveedor',
+
+                    categorias_list = []
+                    for categoria_nombre, categoria_data in categorias_ordenadas:
+                        proveedores_ordenados = sorted(
+                            categoria_data['proveedores'].items(),
+                            key=lambda x: self._texto_orden_alfabetico(x[0])
+                        )
+
+                        proveedores_list = []
+                        for prov_nombre, prov_data in proveedores_ordenados:
+                            proveedores_list.append({
+                                'nombre': prov_data['nombre'],
+                                'monto': prov_data['monto'],
+                                'montos_por_mes': dict(prov_data['montos_por_mes']),
+                                'tipo': 'proveedor',
+                                'nivel': 5,
+                                'activo': True
+                            })
+
+                        categorias_list.append({
+                            'nombre': f"📁 {categoria_nombre}",
+                            'monto': categoria_data['monto'],
+                            'montos_por_mes': dict(categoria_data['montos_por_mes']),
+                            'tipo': 'categoria',
                             'nivel': 4,
-                            'activo': True
-                        }
-                        sub_etiquetas_proveedores.append(prov_entry)
-                    
-                    cat_entry = {
-                        'nombre': f"📁 {categoria_nombre}",
-                        'monto': categoria_data['monto'],
-                        'montos_por_mes': dict(categoria_data['montos_por_mes']),
-                        'tipo': 'categoria',
+                            'activo': True,
+                            'sub_etiquetas': proveedores_list
+                        })
+
+                    etiquetas_list.append({
+                        'nombre': ifrs3_nombre,
+                        'monto': ifrs3_data['monto'],
+                        'montos_por_mes': dict(ifrs3_data['montos_por_mes']),
+                        'tipo': 'ifrs3',
                         'nivel': 3,
                         'activo': True,
-                        'sub_etiquetas': sub_etiquetas_proveedores  # ANIDADOS
-                    }
-                    etiquetas_list.append(cat_entry)
+                        'sub_etiquetas': categorias_list
+                    })
                 
                 cuenta_entry = {
                     'codigo': estado['codigo'],

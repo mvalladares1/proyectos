@@ -752,11 +752,15 @@ class OdooQueryManager:
             cuentas = self.odoo.search_read(
                 'account.account',
                 [['id', 'in', list(set(account_ids))]],
-                ['id', 'code', 'name']
+                ['id', 'code', 'name', 'x_studio_cat_ifrs_3']
             )
             
             return {
-                c['id']: {'code': c.get('code', ''), 'name': c.get('name', '')}
+                c['id']: {
+                    'code': c.get('code', ''),
+                    'name': c.get('name', ''),
+                    'ifrs3': (c.get('x_studio_cat_ifrs_3') or '').strip(),
+                }
                 for c in (cuentas or [])
             }
         except Exception as e:

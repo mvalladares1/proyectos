@@ -34,6 +34,21 @@ class AgregadorFlujo:
         # Inicializar estructuras
         self.montos_por_concepto_mes = self._inicializar_montos()
         self.cuentas_por_concepto = {}  # {concepto_id: {codigo_cuenta: {...}}}
+
+    def enriquecer_cuentas_con_metadatos(self, cuentas_info: Dict[int, Dict]) -> None:
+        """Adjunta metadatos de account.account a las cuentas ya agregadas."""
+        if not cuentas_info:
+            return
+
+        for cuentas in self.cuentas_por_concepto.values():
+            for cuenta in cuentas.values():
+                account_id = cuenta.get('account_id')
+                if not account_id:
+                    continue
+
+                info = cuentas_info.get(account_id, {})
+                if info.get('ifrs3'):
+                    cuenta['ifrs3'] = info['ifrs3']
     
     def _inicializar_montos(self) -> Dict[str, Dict[str, float]]:
         """Inicializa estructura de montos por concepto y mes."""
@@ -1073,6 +1088,7 @@ class AgregadorFlujo:
             resultado.append({
                 "codigo": k,
                 "nombre": v.get("nombre"),
+                "ifrs3": v.get("ifrs3", ""),
                 "monto": round(v.get("monto", 0), 0),
                 "cantidad": v.get("cantidad"),
                 "montos_por_mes": {m: round(v.get("montos_por_mes", {}).get(m, 0), 0) for m in self.meses_lista},

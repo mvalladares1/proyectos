@@ -651,6 +651,22 @@ class FlujoCajaService:
         except Exception as e:
             print(f"[FlujoCaja] Error calculando REAL/PROYECTADO: {e}")
             real_proyectado_data = {}
+
+        # 10.1 Enriquecer cuentas con metadatos contables para filtros/agrupaciones frontend
+        try:
+            _, cuentas_por_concepto = agregador.obtener_resultados()
+            account_ids = []
+            for cuentas in cuentas_por_concepto.values():
+                for cuenta in cuentas.values():
+                    account_id = cuenta.get('account_id')
+                    if account_id:
+                        account_ids.append(account_id)
+
+            if account_ids:
+                cuentas_info = self.odoo_manager.get_account_info_batch(account_ids)
+                agregador.enriquecer_cuentas_con_metadatos(cuentas_info)
+        except Exception as e:
+            print(f"[FlujoCaja] Error enriqueciendo metadatos de cuentas: {e}")
         
         # 11. Construir resultado
         conceptos_por_actividad, subtotales_por_actividad = agregador.construir_conceptos_por_actividad()
