@@ -24,7 +24,10 @@ OCS_CORREGIDAS = {
     'OC13491': {'precio_esperado': 3300.0},
     'OC13530': {'precio_esperado': 3300.0},
     'OC13596': {'precio_esperado': 3300.0},
-    'OC13708': {'precio_esperado': 3300.0}
+    'OC13708': {'precio_esperado': 3300.0},
+    'OC09397': {'precio_esperado': 2850.0},
+    'OC10388': {'precio_esperado': 2850.0},
+    'OC10053': {'precio_esperado': 2850.0}
 }
 
 print("=" * 120)

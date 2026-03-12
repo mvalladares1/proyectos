@@ -1,6 +1,6 @@
 """
 Router para Cartera - CxP (Cuentas por Pagar) y CxC (Cuentas por Cobrar)
-Antigüedad de facturas basada en fecha estimada de pago
+Antigüedad de facturas basada en fecha estimada de pago (x_studio_fecha_de_pago)
 """
 from fastapi import APIRouter, HTTPException
 from typing import Optional
@@ -13,6 +13,9 @@ from backend.services.currency_service import CurrencyService
 
 router = APIRouter(prefix="/api/v1/cartera", tags=["cartera"])
 logger = logging.getLogger(__name__)
+
+# Configurar logging para debug
+logging.basicConfig(level=logging.INFO)
 
 
 def clasificar_antiguedad_cxp(dias: int) -> str:
@@ -85,7 +88,8 @@ async def obtener_antiguedad_cartera(
             ],
             [
                 'id', 'name', 'partner_id', 'amount_total', 'amount_residual',
-                'invoice_date', 'invoice_date_due', 'x_studio_fecha_estimada_de_pago',
+                'invoice_date', 'invoice_date_due', 
+                'x_studio_fecha_de_pago', 'x_studio_fecha_estimada_de_pago',
                 'currency_id', 'state', 'move_type'
             ],
             limit=5000
@@ -188,8 +192,9 @@ async def obtener_antiguedad_cartera(
             if f.get('state') == 'draft':
                 cxp_por_categoria[categoria]["borrador"] += monto
             else:
-                # Usar fecha estimada de pago > fecha vencimiento > fecha factura
+                # Usar x_studio_fecha_de_pago > fecha_estimada > fecha vencimiento > fecha factura
                 fecha_ref = (
+                    f.get('x_studio_fecha_de_pago') or
                     f.get('x_studio_fecha_estimada_de_pago') or 
                     f.get('invoice_date_due') or 
                     f.get('invoice_date')
@@ -237,7 +242,8 @@ async def obtener_antiguedad_cartera(
             ],
             [
                 'id', 'name', 'partner_id', 'amount_total', 'amount_residual',
-                'invoice_date', 'invoice_date_due', 'x_studio_fecha_estimada_de_pago',
+                'invoice_date', 'invoice_date_due',
+                'x_studio_fecha_de_pago', 'x_studio_fecha_estimada_de_pago',
                 'currency_id', 'move_type'
             ],
             limit=5000
@@ -292,6 +298,11 @@ async def obtener_antiguedad_cartera(
             cliente_info = clientes_info.get(partner_id, {'name': partner_data[1], 'es_nacional': True})
             cliente_name = cliente_info['name']
             
+            # Filtrar clientes con nombre vacío o inválido
+            if not cliente_name or cliente_name in ('False', 'false', '', None):
+                logger.warning(f"Factura {f.get('name')} tiene cliente sin nombre válido (partner_id={partner_id})")
+                continue
+            
             monto = float(f.get('amount_residual') or 0)
             if monto == 0:
                 continue
@@ -305,8 +316,9 @@ async def obtener_antiguedad_cartera(
             if f.get('move_type') == 'out_refund':
                 monto = -monto
             
-            # Clasificar por antigüedad
+            # Clasificar por antigüedad - usar x_studio_fecha_de_pago primero
             fecha_ref = (
+                f.get('x_studio_fecha_de_pago') or
                 f.get('x_studio_fecha_estimada_de_pago') or 
                 f.get('invoice_date_due') or 
                 f.get('invoice_date')
