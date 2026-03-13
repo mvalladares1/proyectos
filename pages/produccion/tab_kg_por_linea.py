@@ -320,13 +320,158 @@ def _build_chart_kg_dia_sala(mos_list: List[Dict], title: str = "⚖️ KG Produ
 
 
 def _render_grafico_salas(mos_filtradas: List[Dict], salas_data: Dict[str, Dict], agrupacion: str = "📅 Día"):
-    """Gráfico de KG desglosado por día y sala."""
+    """Gráfico de KG desglosado por día y sala con KPIs y ranking."""
+    if not mos_filtradas:
+        return
+
+    # ── Calcular métricas para KPIs ──
+    total_kg = sum(mo.get('kg_pt', 0) or 0 for mo in mos_filtradas)
+    total_ordenes = len(mos_filtradas)
+    total_horas = sum(mo.get('duracion_horas', 0) or 0 for mo in mos_filtradas)
+    prom_kg_h = total_kg / total_horas if total_horas > 0 else 0
+
+    # Agrupar KG por día para encontrar mejor/peor día
+    dia_kg_total: Dict[str, float] = defaultdict(float)
+    dia_ordenes: Dict[str, int] = defaultdict(int)
+    sala_kg_total: Dict[str, float] = defaultdict(float)
+    sala_horas_total: Dict[str, float] = defaultdict(float)
+
+    for mo in mos_filtradas:
+        dt = mo.get('_inicio_dt')
+        sala = mo.get('sala') or 'Sin Sala'
+        kg = mo.get('kg_pt', 0) or 0
+        horas = mo.get('duracion_horas', 0) or 0
+        sala_kg_total[sala] += kg
+        if horas > 0:
+            sala_horas_total[sala] += horas
+        if dt:
+            if agrupacion == "📆 Semana":
+                iso_y, iso_w, _ = dt.isocalendar()
+                dia_key = f"S{iso_w:02d}/{iso_y}"
+            else:
+                dia_key = dt.strftime('%d/%m/%y')
+            dia_kg_total[dia_key] += kg
+            dia_ordenes[dia_key] += 1
+
+    dias_con_datos = len(dia_kg_total)
+    prom_diario = total_kg / dias_con_datos if dias_con_datos > 0 else 0
+    mejor_dia = max(dia_kg_total.items(), key=lambda x: x[1]) if dia_kg_total else ("—", 0)
+    mejor_sala = max(sala_kg_total.items(), key=lambda x: x[1]) if sala_kg_total else ("—", 0)
+
+    # ── KPI Cards ──
+    st.markdown(f"""
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;">
+        <div style="background:#fff;border-radius:12px;padding:16px;border:1px solid #e0e0e0;
+                    box-shadow:0 1px 4px rgba(0,0,0,0.04);text-align:center;">
+            <div style="font-size:11px;color:#90A4AE;font-weight:600;text-transform:uppercase;">Total Producido</div>
+            <div style="font-size:26px;font-weight:800;color:#2196F3;margin:4px 0;">{total_kg:,.0f}</div>
+            <div style="font-size:11px;color:#999;">KG en {dias_con_datos} {'semanas' if agrupacion == '📆 Semana' else 'días'}</div>
+        </div>
+        <div style="background:#fff;border-radius:12px;padding:16px;border:1px solid #e0e0e0;
+                    box-shadow:0 1px 4px rgba(0,0,0,0.04);text-align:center;">
+            <div style="font-size:11px;color:#90A4AE;font-weight:600;text-transform:uppercase;">Promedio {'Semanal' if agrupacion == '📆 Semana' else 'Diario'}</div>
+            <div style="font-size:26px;font-weight:800;color:#4CAF50;margin:4px 0;">{prom_diario:,.0f}</div>
+            <div style="font-size:11px;color:#999;">KG / {'semana' if agrupacion == '📆 Semana' else 'día'}  ·  {total_ordenes} órdenes</div>
+        </div>
+        <div style="background:#fff;border-radius:12px;padding:16px;border:1px solid #e0e0e0;
+                    box-shadow:0 1px 4px rgba(0,0,0,0.04);text-align:center;">
+            <div style="font-size:11px;color:#90A4AE;font-weight:600;text-transform:uppercase;">Mejor {'Semana' if agrupacion == '📆 Semana' else 'Día'}</div>
+            <div style="font-size:26px;font-weight:800;color:#FF9800;margin:4px 0;">{mejor_dia[1]:,.0f}</div>
+            <div style="font-size:11px;color:#999;">KG el {mejor_dia[0]}</div>
+        </div>
+        <div style="background:#fff;border-radius:12px;padding:16px;border:1px solid #e0e0e0;
+                    box-shadow:0 1px 4px rgba(0,0,0,0.04);text-align:center;">
+            <div style="font-size:11px;color:#90A4AE;font-weight:600;text-transform:uppercase;">Sala Top</div>
+            <div style="font-size:22px;font-weight:800;color:#9C27B0;margin:4px 0;">{mejor_sala[0]}</div>
+            <div style="font-size:11px;color:#999;">{mejor_sala[1]:,.0f} KG  ·  {mejor_sala[1]/total_kg*100:.0f}% del total</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ── Gráfico principal de barras apiladas ──
     result = _build_chart_kg_dia_sala(mos_filtradas, agrupacion=agrupacion)
     if not result:
         return
     options, salas_sorted = result
     altura = max(450, 380 + len(salas_sorted) * 8)
     st_echarts(options=options, height=f"{altura}px")
+
+    # ── Ranking de Salas (barras horizontales) ──
+    salas_ranking = sorted(sala_kg_total.items(), key=lambda x: x[1], reverse=True)
+    ranking_salas = [s[0] for s in salas_ranking]
+    ranking_kg = [round(s[1]) for s in salas_ranking]
+    ranking_kgh = [round(sala_kg_total[s] / sala_horas_total[s]) if sala_horas_total.get(s, 0) > 0 else 0 for s, _ in salas_ranking]
+    max_kg = max(ranking_kg) if ranking_kg else 1
+
+    colores_ranking = ['#2196F3', '#F44336', '#4CAF50', '#FFC107', '#9C27B0',
+                       '#FF9800', '#00BCD4', '#E91E63', '#009688', '#673AB7']
+
+    ranking_opts = {
+        "backgroundColor": "#ffffff",
+        "title": {
+            "text": "🏆 Ranking de Salas — KG Totales",
+            "subtext": "Producción acumulada por sala en el período seleccionado",
+            "left": "center",
+            "textStyle": {"color": "#333", "fontSize": 15, "fontWeight": "600"},
+            "subtextStyle": {"color": "#888", "fontSize": 12}
+        },
+        "tooltip": {
+            "trigger": "axis",
+            "axisPointer": {"type": "shadow"},
+            "backgroundColor": "rgba(255,255,255,0.96)",
+            "borderColor": "#7FA8C9",
+            "borderWidth": 2,
+            "borderRadius": 8,
+            "textStyle": {"color": "#333", "fontSize": 12},
+        },
+        "grid": {"left": "3%", "right": "15%", "bottom": "8%", "top": "18%", "containLabel": True},
+        "xAxis": {
+            "type": "value",
+            "name": "KG",
+            "nameTextStyle": {"color": "#999", "fontSize": 11},
+            "axisLabel": {"color": "#666", "fontSize": 11},
+            "splitLine": {"lineStyle": {"color": "#f0f0f0"}},
+        },
+        "yAxis": {
+            "type": "category",
+            "data": list(reversed(ranking_salas)),
+            "axisLabel": {"color": "#333", "fontSize": 12, "fontWeight": "600"},
+            "axisLine": {"show": False},
+            "axisTick": {"show": False}
+        },
+        "series": [
+            {
+                "name": "KG Producidos",
+                "type": "bar",
+                "data": [
+                    {
+                        "value": v,
+                        "itemStyle": {
+                            "color": {
+                                "type": "linear", "x": 0, "y": 0, "x2": 1, "y2": 0,
+                                "colorStops": [
+                                    {"offset": 0, "color": colores_ranking[i % len(colores_ranking)]},
+                                    {"offset": 1, "color": colores_ranking[i % len(colores_ranking)] + "88"}
+                                ]
+                            },
+                            "borderRadius": [0, 6, 6, 0]
+                        }
+                    } for i, v in enumerate(reversed(ranking_kg))
+                ],
+                "barMaxWidth": 30,
+                "label": {
+                    "show": True,
+                    "position": "right",
+                    "fontSize": 12,
+                    "fontWeight": "bold",
+                    "color": "#555",
+                    "formatter": JsCode("function(p){return p.value.toLocaleString('en-US')+' kg';}").js_code
+                }
+            }
+        ]
+    }
+    ranking_height = max(250, 60 + len(ranking_salas) * 42)
+    st_echarts(options=ranking_opts, height=f"{ranking_height}px")
 
 
 def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Dict], agrupacion: str = "📅 Día"):
