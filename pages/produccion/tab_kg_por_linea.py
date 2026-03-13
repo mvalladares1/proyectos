@@ -1534,9 +1534,11 @@ def _render_comparacion_turnos(mos_filtradas: List[Dict]):
                 <td style="padding:8px 10px;text-align:right;font-weight:700;font-size:14px;color:{'#2E7D32' if turno_name=='Día' else '#00838F'};">{kh_ef:,}</td>
             </tr>"""
 
-    st.markdown(f"""
+    table_height = 54 + len(salas_sorted) * 2 * 44 + 20
+    table_html = f"""
+    <html><body style="margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
     <div style="overflow-x:auto;border-radius:10px;border:1px solid #e0e0e0;box-shadow:0 1px 4px rgba(0,0,0,0.04);">
-    <table style="width:100%;border-collapse:collapse;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+    <table style="width:100%;border-collapse:collapse;">
         <thead>
             <tr style="background:linear-gradient(135deg,#37474F,#455A64);">
                 <th style="padding:12px;text-align:left;color:#fff;font-size:12px;font-weight:600;">Sala</th>
@@ -1555,10 +1557,6 @@ def _render_comparacion_turnos(mos_filtradas: List[Dict]):
         </tbody>
     </table>
     </div>
-    """, unsafe_allow_html=True)
-
-    # Explicación de métricas
-    st.markdown("""
     <div style="margin-top:16px;padding:14px 18px;background:#F5F5F5;border-radius:10px;border:1px solid #e8e8e8;">
         <div style="font-size:12px;font-weight:700;color:#546E7A;margin-bottom:8px;">📖 ¿Cómo se calcula cada métrica?</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
@@ -1572,7 +1570,9 @@ def _render_comparacion_turnos(mos_filtradas: List[Dict]):
             </div>
         </div>
     </div>
-    """, unsafe_allow_html=True)
+    </body></html>
+    """
+    st.components.v1.html(table_html, height=table_height + 120, scrolling=False)
 
 
 def render(username: str = None, password: str = None):
