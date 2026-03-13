@@ -1491,14 +1491,17 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
                     st.text(f"{_row['estado_aprobacion']}")
 
                 with col_aprobadores:
-                    st.text(f"{_row['aprobadores'][:22]}")
+                    aprobadores_preview = _row['aprobadores'] if isinstance(_row['aprobadores'], str) else ''
+                    if len(aprobadores_preview) > 18:
+                        aprobadores_preview = f"{aprobadores_preview[:18]}…"
+                    st.text(aprobadores_preview)
 
                 detalle_key = f"detalle_visible_{key_proveedor}_{_row['oc_id']}"
                 if detalle_key not in st.session_state:
                     st.session_state[detalle_key] = False
 
                 with col_detalle:
-                    label_detalle = "📖 Ocultar" if st.session_state[detalle_key] else "📋 Ver"
+                    label_detalle = "Ocultar" if st.session_state[detalle_key] else "Detalles"
                     if st.button(label_detalle, key=f"btn_{detalle_key}", use_container_width=True):
                         st.session_state[detalle_key] = not st.session_state[detalle_key]
 
@@ -1611,7 +1614,7 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
                     if _row.get('aprobadores') and _row['aprobadores'] != 'Sin aprobaciones':
                         st.markdown(f"**Aprobadores:** {_row['aprobadores']}")
                 
-                st.markdown("---")  # Separador entre filas
+                st.divider()
         if st.session_state[f'selected_{key_proveedor}']:
             st.markdown("---")
             
