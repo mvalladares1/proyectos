@@ -427,29 +427,29 @@ def _render_grafico_salas(mos_filtradas: List[Dict], salas_data: Dict[str, Dict]
 
     # ── KPI Cards ──
     st.markdown(f"""
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;">
-        <div style="background:#fff;border-radius:12px;padding:16px;border:1px solid #e0e0e0;
-                    box-shadow:0 1px 4px rgba(0,0,0,0.04);text-align:center;">
-            <div style="font-size:11px;color:#90A4AE;font-weight:600;text-transform:uppercase;">Total Producido</div>
-            <div style="font-size:26px;font-weight:800;color:#2196F3;margin:4px 0;">{total_kg:,.0f}</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:16px;">
+        <div style="background:#fff;border-radius:12px;padding:18px 14px;text-align:center;
+                    border:1px solid #e8eaed;box-shadow:0 2px 8px rgba(0,0,0,0.04);">
+            <div style="font-size:11px;color:#90A4AE;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Total Producido</div>
+            <div style="font-size:28px;font-weight:800;color:#2E7D32;margin:6px 0 2px;">{total_kg:,.0f}</div>
             <div style="font-size:11px;color:#999;">KG en {dias_con_datos} {'semanas' if agrupacion == '📆 Semana' else 'días'}</div>
         </div>
-        <div style="background:#fff;border-radius:12px;padding:16px;border:1px solid #e0e0e0;
-                    box-shadow:0 1px 4px rgba(0,0,0,0.04);text-align:center;">
-            <div style="font-size:11px;color:#90A4AE;font-weight:600;text-transform:uppercase;">Promedio {'Semanal' if agrupacion == '📆 Semana' else 'Diario'}</div>
-            <div style="font-size:26px;font-weight:800;color:#4CAF50;margin:4px 0;">{prom_diario:,.0f}</div>
+        <div style="background:#fff;border-radius:12px;padding:18px 14px;text-align:center;
+                    border:1px solid #e8eaed;box-shadow:0 2px 8px rgba(0,0,0,0.04);">
+            <div style="font-size:11px;color:#90A4AE;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Promedio {'Semanal' if agrupacion == '📆 Semana' else 'Diario'}</div>
+            <div style="font-size:28px;font-weight:800;color:#E65100;margin:6px 0 2px;">{prom_diario:,.0f}</div>
             <div style="font-size:11px;color:#999;">KG / {'semana' if agrupacion == '📆 Semana' else 'día'}  ·  {total_ordenes} órdenes</div>
         </div>
-        <div style="background:#fff;border-radius:12px;padding:16px;border:1px solid #e0e0e0;
-                    box-shadow:0 1px 4px rgba(0,0,0,0.04);text-align:center;">
-            <div style="font-size:11px;color:#90A4AE;font-weight:600;text-transform:uppercase;">Mejor {'Semana' if agrupacion == '📆 Semana' else 'Día'}</div>
-            <div style="font-size:26px;font-weight:800;color:#FF9800;margin:4px 0;">{mejor_dia[1]:,.0f}</div>
+        <div style="background:#fff;border-radius:12px;padding:18px 14px;text-align:center;
+                    border:1px solid #e8eaed;box-shadow:0 2px 8px rgba(0,0,0,0.04);">
+            <div style="font-size:11px;color:#90A4AE;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Mejor {'Semana' if agrupacion == '📆 Semana' else 'Día'}</div>
+            <div style="font-size:28px;font-weight:800;color:#00838F;margin:6px 0 2px;">{mejor_dia[1]:,.0f}</div>
             <div style="font-size:11px;color:#999;">KG el {mejor_dia[0]}</div>
         </div>
-        <div style="background:#fff;border-radius:12px;padding:16px;border:1px solid #e0e0e0;
-                    box-shadow:0 1px 4px rgba(0,0,0,0.04);text-align:center;">
-            <div style="font-size:11px;color:#90A4AE;font-weight:600;text-transform:uppercase;">Sala Top</div>
-            <div style="font-size:22px;font-weight:800;color:#9C27B0;margin:4px 0;">{mejor_sala[0]}</div>
+        <div style="background:#fff;border-radius:12px;padding:18px 14px;text-align:center;
+                    border:1px solid #e8eaed;box-shadow:0 2px 8px rgba(0,0,0,0.04);">
+            <div style="font-size:11px;color:#90A4AE;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Sala Top</div>
+            <div style="font-size:22px;font-weight:800;color:#5C6BC0;margin:6px 0 2px;">{mejor_sala[0]}</div>
             <div style="font-size:11px;color:#999;">{mejor_sala[1]:,.0f} KG  ·  {mejor_sala[1]/total_kg*100:.0f}% del total</div>
         </div>
     </div>
@@ -471,11 +471,10 @@ def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Di
     
     st.markdown("---")
     st.markdown("""
-    <div style="background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
-                padding: 20px; border-radius: 12px; margin-bottom: 15px;
-                border-left: 5px solid #7FA8C9; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
-        <h3 style="margin:0; color:#7FA8C9;">⚡ Rendimiento KG/Hora</h3>
-        <p style="margin:5px 0 0 0; color:#666; font-size:13px;">
+    <div style="background:linear-gradient(135deg,#1a237e,#3949ab);padding:18px 24px;border-radius:12px;margin-bottom:16px;
+                box-shadow:0 3px 12px rgba(26,35,126,0.15);">
+        <h3 style="margin:0;color:#fff;font-size:18px;font-weight:700;">⚡ Rendimiento KG/Hora</h3>
+        <p style="margin:6px 0 0 0;color:rgba(255,255,255,0.7);font-size:13px;">
             Análisis detallado de productividad por hora
         </p>
     </div>
@@ -1303,14 +1302,13 @@ def _render_comparacion_turnos(mos_filtradas: List[Dict]):
     # ════════════════════════════════════════════════
 
     st.markdown("""
-    <div style="background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
-                padding: 24px; border-radius: 14px; margin-bottom: 20px;
-                border-left: 5px solid #E8A87C; box-shadow: 0 2px 12px rgba(0,0,0,0.06);">
-        <h3 style="margin:0; color:#37474F; font-size:20px;">☀️🌙 Análisis por Turno — Día vs Tarde</h3>
-        <p style="margin:8px 0 0 0; color:#78909C; font-size:13px; line-height:1.5;">
+    <div style="background:linear-gradient(135deg,#1a237e,#3949ab);padding:18px 24px;border-radius:12px;margin-bottom:16px;
+                box-shadow:0 3px 12px rgba(26,35,126,0.15);">
+        <h3 style="margin:0;color:#fff;font-size:18px;font-weight:700;">☀️🌙 Análisis por Turno — Día vs Tarde</h3>
+        <p style="margin:6px 0 0 0;color:rgba(255,255,255,0.7);font-size:13px;line-height:1.5;">
             Compara el rendimiento productivo entre turnos.<br>
-            <strong>Turno Día:</strong> L-J hasta 17:30 · V hasta 16:30 · S hasta 13:00 &nbsp;|&nbsp;
-            <strong>Turno Tarde:</strong> Después de los cortes anteriores.
+            <strong style="color:rgba(255,255,255,0.9);">Día:</strong> L-J hasta 17:30 · V hasta 16:30 · S hasta 13:00 &nbsp;|&nbsp;
+            <strong style="color:rgba(255,255,255,0.9);">Tarde:</strong> Después de los cortes.
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -1319,32 +1317,32 @@ def _render_comparacion_turnos(mos_filtradas: List[Dict]):
     c1, c2, c3, c4 = st.columns(4)
     with c1:
         st.markdown(f"""
-        <div style="background:linear-gradient(135deg,#FFF8E1,#FFFDE7);padding:16px 12px;border-radius:12px;
-                    border-left:4px solid #FFB74D;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,0.06);">
-            <div style="font-size:11px;color:#F57C00;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">☀️ Turno Día</div>
-            <div style="font-size:28px;font-weight:800;color:#E65100;margin:6px 0 3px;">{prom_d:,}</div>
-            <div style="font-size:11px;color:#BF360C;">kg/hora promedio</div>
-            <div style="font-size:10px;color:#999;margin-top:4px;">{total_d['ord']} órdenes · {total_d['kg']:,.0f} kg · {total_d['horas']:,.1f}h</div>
+        <div style="background:#fff;border-radius:12px;padding:18px 14px;text-align:center;
+                    border:1px solid #e8eaed;box-shadow:0 2px 8px rgba(0,0,0,0.04);">
+            <div style="font-size:11px;color:#90A4AE;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">☀️ Turno Día</div>
+            <div style="font-size:28px;font-weight:800;color:#E65100;margin:6px 0 2px;">{prom_d:,}</div>
+            <div style="font-size:11px;color:#999;">kg/hora promedio</div>
+            <div style="font-size:10px;color:#bbb;margin-top:4px;">{total_d['ord']} órdenes · {total_d['kg']:,.0f} kg · {total_d['horas']:,.1f}h</div>
         </div>
         """, unsafe_allow_html=True)
     with c2:
         st.markdown(f"""
-        <div style="background:linear-gradient(135deg,#EDE7F6,#F3E5F5);padding:16px 12px;border-radius:12px;
-                    border-left:4px solid #7E57C2;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,0.06);">
-            <div style="font-size:11px;color:#5E35B1;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">🌙 Turno Tarde</div>
-            <div style="font-size:28px;font-weight:800;color:#4527A0;margin:6px 0 3px;">{prom_t:,}</div>
-            <div style="font-size:11px;color:#311B92;">kg/hora promedio</div>
-            <div style="font-size:10px;color:#999;margin-top:4px;">{total_t['ord']} órdenes · {total_t['kg']:,.0f} kg · {total_t['horas']:,.1f}h</div>
+        <div style="background:#fff;border-radius:12px;padding:18px 14px;text-align:center;
+                    border:1px solid #e8eaed;box-shadow:0 2px 8px rgba(0,0,0,0.04);">
+            <div style="font-size:11px;color:#90A4AE;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">🌙 Turno Tarde</div>
+            <div style="font-size:28px;font-weight:800;color:#4527A0;margin:6px 0 2px;">{prom_t:,}</div>
+            <div style="font-size:11px;color:#999;">kg/hora promedio</div>
+            <div style="font-size:10px;color:#bbb;margin-top:4px;">{total_t['ord']} órdenes · {total_t['kg']:,.0f} kg · {total_t['horas']:,.1f}h</div>
         </div>
         """, unsafe_allow_html=True)
     with c3:
         st.markdown(f"""
-        <div style="background:linear-gradient(135deg,#f5f5f5,#fafafa);padding:16px 12px;border-radius:12px;
-                    border-left:4px solid {diff_color};text-align:center;box-shadow:0 1px 4px rgba(0,0,0,0.06);">
-            <div style="font-size:11px;color:#546E7A;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">{diff_icon} Diferencia</div>
-            <div style="font-size:28px;font-weight:800;color:{diff_color};margin:6px 0 3px;">{'+' if diff_pct > 0 else ''}{diff_pct}%</div>
-            <div style="font-size:11px;color:#78909C;">día vs tarde</div>
-            <div style="font-size:10px;color:#999;margin-top:4px;">{'Día rinde más' if diff_pct > 0 else 'Tarde rinde más' if diff_pct < 0 else 'Rendimiento similar'}</div>
+        <div style="background:#fff;border-radius:12px;padding:18px 14px;text-align:center;
+                    border:1px solid #e8eaed;box-shadow:0 2px 8px rgba(0,0,0,0.04);">
+            <div style="font-size:11px;color:#90A4AE;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">{diff_icon} Diferencia</div>
+            <div style="font-size:28px;font-weight:800;color:{diff_color};margin:6px 0 2px;">{'+' if diff_pct > 0 else ''}{diff_pct}%</div>
+            <div style="font-size:11px;color:#999;">día vs tarde</div>
+            <div style="font-size:10px;color:#bbb;margin-top:4px;">{'Día rinde más' if diff_pct > 0 else 'Tarde rinde más' if diff_pct < 0 else 'Rendimiento similar'}</div>
         </div>
         """, unsafe_allow_html=True)
     with c4:
@@ -1353,12 +1351,12 @@ def _render_comparacion_turnos(mos_filtradas: List[Dict]):
         pct_det = round(total_det / total_horas * 100, 1) if total_horas > 0 else 0
         det_color = "#C62828" if pct_det > 15 else "#EF6C00" if pct_det > 8 else "#2E7D32"
         st.markdown(f"""
-        <div style="background:linear-gradient(135deg,#FBE9E7,#FFF3E0);padding:16px 12px;border-radius:12px;
-                    border-left:4px solid {det_color};text-align:center;box-shadow:0 1px 4px rgba(0,0,0,0.06);">
-            <div style="font-size:11px;color:#BF360C;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">⏸️ Detenciones</div>
-            <div style="font-size:28px;font-weight:800;color:{det_color};margin:6px 0 3px;">{total_det:,.1f}h</div>
-            <div style="font-size:11px;color:#D84315;">{pct_det}% del tiempo total</div>
-            <div style="font-size:10px;color:#999;margin-top:4px;">Día: {total_d['det']:,.1f}h · Tarde: {total_t['det']:,.1f}h</div>
+        <div style="background:#fff;border-radius:12px;padding:18px 14px;text-align:center;
+                    border:1px solid #e8eaed;box-shadow:0 2px 8px rgba(0,0,0,0.04);">
+            <div style="font-size:11px;color:#90A4AE;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">⏸️ Detenciones</div>
+            <div style="font-size:28px;font-weight:800;color:{det_color};margin:6px 0 2px;">{total_det:,.1f}h</div>
+            <div style="font-size:11px;color:#999;">{pct_det}% del tiempo total</div>
+            <div style="font-size:10px;color:#bbb;margin-top:4px;">Día: {total_d['det']:,.1f}h · Tarde: {total_t['det']:,.1f}h</div>
         </div>
         """, unsafe_allow_html=True)
 
@@ -1722,11 +1720,11 @@ def render(username: str = None, password: str = None):
         st.warning("⚠️ Debes iniciar sesión para ver este módulo")
         return
 
-    # === FONDO BLANCO solo para main content (NO sidebar) ===
+    # === ESTILOS GLOBALES ===
     st.markdown("""
     <style>
     section.main > div.block-container {
-        background-color: #ffffff !important;
+        background-color: #f8f9fb !important;
     }
     section.main > div.block-container p,
     section.main > div.block-container span,
@@ -1752,19 +1750,25 @@ def render(username: str = None, password: str = None):
         color: #333 !important;
     }
     section.main > div.block-container hr {
-        border-color: #e0e0e0 !important;
+        border-color: #e8eaed !important;
+    }
+    [data-testid="stMetricValue"] {
+        font-size: 1.2rem !important;
+    }
+    [data-testid="stMetricLabel"] {
+        font-size: 0.85rem !important;
     }
     </style>
     """, unsafe_allow_html=True)
 
     # === HEADER ===
     st.markdown("""
-    <div style="background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
-                padding: 25px; border-radius: 15px; margin-bottom: 20px;
-                border-left: 5px solid #7FA8C9; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
-        <h2 style="margin:0; color:#7FA8C9;">🏭 Rendimiento en Salas</h2>
-        <p style="margin:5px 0 0 0; color:#666;">
-            Rendimiento, KG/Hora y detalle de órdenes por sala de proceso
+    <div style="background:linear-gradient(135deg,#1a237e 0%,#283593 50%,#3949ab 100%);
+                padding:28px 32px;border-radius:14px;margin-bottom:24px;
+                box-shadow:0 4px 20px rgba(26,35,126,0.25);">
+        <h2 style="margin:0;color:#fff;font-size:24px;font-weight:700;letter-spacing:-0.3px;">🏭 Rendimiento en Salas</h2>
+        <p style="margin:8px 0 0 0;color:rgba(255,255,255,0.75);font-size:14px;">
+            Análisis de producción, eficiencia y rendimiento por sala de proceso
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -1890,16 +1894,42 @@ def render(username: str = None, password: str = None):
     hechas_total = sum(s['hechas'] for s in salas_data.values())
     no_hechas_total = sum(s['no_hechas'] for s in salas_data.values())
 
-    k1, k2, k3, k4 = st.columns(4)
-    with k1:
-        st.metric("📋 Órdenes", f"{total_ordenes:,}",
-                   help=f"✅ {hechas_total} hechas | 🔄 {no_hechas_total} en proceso")
-    with k2:
-        st.metric("⚖️ KG Procesados", f"{total_kg:,.0f}")
-    with k3:
-        st.metric("⚡ KG/Hora Prom", f"{prom_kg_hora:,.0f}")
-    with k4:
-        st.metric("🏭 Salas Activas", f"{len(salas_data)}")
+    total_horas_prom = sum(mo.get('duracion_horas', 0) or 0 for mo in mos_filtradas)
+    pct_completadas = round(hechas_total / total_ordenes * 100) if total_ordenes > 0 else 0
+    st.markdown(f"""
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:20px;">
+        <div style="background:#fff;border-radius:12px;padding:18px 14px;text-align:center;
+                    border:1px solid #e8eaed;box-shadow:0 2px 8px rgba(0,0,0,0.04);">
+            <div style="font-size:11px;color:#90A4AE;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Órdenes</div>
+            <div style="font-size:28px;font-weight:800;color:#1a237e;margin:6px 0 2px;">{total_ordenes:,}</div>
+            <div style="font-size:11px;color:#999;">✅ {hechas_total} hechas · 🔄 {no_hechas_total} en proceso</div>
+        </div>
+        <div style="background:#fff;border-radius:12px;padding:18px 14px;text-align:center;
+                    border:1px solid #e8eaed;box-shadow:0 2px 8px rgba(0,0,0,0.04);">
+            <div style="font-size:11px;color:#90A4AE;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">KG Procesados</div>
+            <div style="font-size:28px;font-weight:800;color:#2E7D32;margin:6px 0 2px;">{total_kg:,.0f}</div>
+            <div style="font-size:11px;color:#999;">{total_horas_prom:,.1f} horas totales</div>
+        </div>
+        <div style="background:#fff;border-radius:12px;padding:18px 14px;text-align:center;
+                    border:1px solid #e8eaed;box-shadow:0 2px 8px rgba(0,0,0,0.04);">
+            <div style="font-size:11px;color:#90A4AE;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">KG/Hora Prom</div>
+            <div style="font-size:28px;font-weight:800;color:#E65100;margin:6px 0 2px;">{prom_kg_hora:,.0f}</div>
+            <div style="font-size:11px;color:#999;">Promedio ponderado</div>
+        </div>
+        <div style="background:#fff;border-radius:12px;padding:18px 14px;text-align:center;
+                    border:1px solid #e8eaed;box-shadow:0 2px 8px rgba(0,0,0,0.04);">
+            <div style="font-size:11px;color:#90A4AE;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Salas Activas</div>
+            <div style="font-size:28px;font-weight:800;color:#5C6BC0;margin:6px 0 2px;">{len(salas_data)}</div>
+            <div style="font-size:11px;color:#999;">{pct_completadas}% completadas</div>
+        </div>
+        <div style="background:#fff;border-radius:12px;padding:18px 14px;text-align:center;
+                    border:1px solid #e8eaed;box-shadow:0 2px 8px rgba(0,0,0,0.04);">
+            <div style="font-size:11px;color:#90A4AE;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Prom Diario</div>
+            <div style="font-size:28px;font-weight:800;color:#00838F;margin:6px 0 2px;">{total_kg / max(len(set(mo.get('_inicio_dt', datetime.min).date() for mo in mos_filtradas if mo.get('_inicio_dt'))), 1):,.0f}</div>
+            <div style="font-size:11px;color:#999;">KG / día</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
     # === BOTÓN DESCARGAR INFORME ===
     pdf_bytes = _generar_informe_pdf(
@@ -1938,10 +1968,19 @@ def render(username: str = None, password: str = None):
     st.markdown("---")
 
     # === TARJETAS POR SALA ===
+    st.markdown("""
+    <div style="background:linear-gradient(135deg,#1a237e,#3949ab);padding:18px 24px;border-radius:12px;margin-bottom:16px;
+                box-shadow:0 3px 12px rgba(26,35,126,0.15);">
+        <h3 style="margin:0;color:#fff;font-size:18px;font-weight:700;">🏭 Detalle por Sala</h3>
+        <p style="margin:6px 0 0 0;color:rgba(255,255,255,0.7);font-size:13px;">
+            Métricas y órdenes individuales por cada sala de proceso
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
     colores_sala = [
-        '#2196F3', '#F44336', '#4CAF50', '#FFC107', '#9C27B0',
-        '#FF9800', '#00BCD4', '#E91E63', '#009688', '#673AB7',
-        '#FF5722', '#03A9F4', '#8BC34A', '#00ACC1', '#FFEB3B',
+        '#1a237e', '#2E7D32', '#E65100', '#4527A0', '#00838F',
+        '#C62828', '#00695C', '#AD1457', '#F57F17', '#283593',
     ]
 
     # Ordenar salas por KG/Hora (kg_con_duracion/duracion) descendente
@@ -1958,35 +1997,45 @@ def render(username: str = None, password: str = None):
         c = colores_sala[idx % len(colores_sala)]
         total = sd['hechas'] + sd['no_hechas']
 
-        # Tarjeta de sala
+        pct_hechas = (sd['hechas'] / total * 100) if total > 0 else 0
+
+        # Tarjeta de sala con KPIs integrados
         st.markdown(f"""
-        <div style="background: linear-gradient(135deg, {c}18, {c}08);
-                    border: 1px solid {c}40; border-radius: 12px; padding: 18px;
-                    margin-bottom: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.08);">
-            <div style="display: flex; justify-content: space-between;
-                        align-items: center; flex-wrap: wrap;">
-                <div style="color: {c}; font-weight: 600; font-size: 18px;">
-                    {em} 🏭 {sala}
+        <div style="background:#fff;border-radius:12px;padding:20px 24px;margin-bottom:8px;
+                    border:1px solid #e8eaed;box-shadow:0 2px 8px rgba(0,0,0,0.04);">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;
+                        padding-bottom:12px;border-bottom:1px solid #f0f0f0;">
+                <div style="display:flex;align-items:center;gap:10px;">
+                    <div style="width:6px;height:36px;background:{c};border-radius:3px;"></div>
+                    <div>
+                        <div style="font-size:17px;font-weight:700;color:#1a237e;">{em} {sala}</div>
+                        <div style="font-size:12px;color:#90A4AE;">{total} órdenes · {sd['hechas']} ✅ hechas · {sd['no_hechas']} 🔄 proceso</div>
+                    </div>
                 </div>
-                <div style="color: #666; font-size: 13px;">
-                    {total} órdenes
-                    ({sd['hechas']} ✅ hechas | {sd['no_hechas']} 🔄 en proceso)
+                <div style="font-size:12px;color:#999;background:#f5f5f5;padding:4px 12px;border-radius:20px;">
+                    {pct_hechas:.0f}% completadas
+                </div>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;">
+                <div style="text-align:center;">
+                    <div style="font-size:10px;color:#90A4AE;font-weight:600;text-transform:uppercase;">Órdenes</div>
+                    <div style="font-size:22px;font-weight:800;color:#1a237e;">{total}</div>
+                </div>
+                <div style="text-align:center;">
+                    <div style="font-size:10px;color:#90A4AE;font-weight:600;text-transform:uppercase;">KG Procesados</div>
+                    <div style="font-size:22px;font-weight:800;color:#2E7D32;">{sd['total_kg']:,.0f}</div>
+                </div>
+                <div style="text-align:center;">
+                    <div style="font-size:10px;color:#90A4AE;font-weight:600;text-transform:uppercase;">KG/Hora Prom</div>
+                    <div style="font-size:22px;font-weight:800;color:#E65100;">{prom:,.0f}</div>
+                </div>
+                <div style="text-align:center;">
+                    <div style="font-size:10px;color:#90A4AE;font-weight:600;text-transform:uppercase;">% Completadas</div>
+                    <div style="font-size:22px;font-weight:800;color:#5C6BC0;">{pct_hechas:.0f}%</div>
                 </div>
             </div>
         </div>
         """, unsafe_allow_html=True)
-
-        # Métricas de la sala
-        mc1, mc2, mc3, mc4 = st.columns(4)
-        with mc1:
-            st.metric("📋 Órdenes", f"{total}")
-        with mc2:
-            st.metric("⚖️ KG Procesados", f"{sd['total_kg']:,.0f}")
-        with mc3:
-            st.metric("⚡ KG/Hora Prom", f"{prom:,.0f}")
-        with mc4:
-            pct_hechas = (sd['hechas'] / total * 100) if total > 0 else 0
-            st.metric("✅ % Completadas", f"{pct_hechas:.0f}%")
 
         # Desplegable con detalle de órdenes
         with st.expander(f"📋 Ver {total} órdenes de {sala}", expanded=False):
@@ -2041,18 +2090,6 @@ def render(username: str = None, password: str = None):
                     f' — {em_esp} {especie_o}{det_str}',
                     unsafe_allow_html=True
                 )
-
-                # CSS para ajustar tamaño de fuente en métricas
-                st.markdown("""
-                <style>
-                [data-testid="stMetricValue"] {
-                    font-size: 1.2rem !important;
-                }
-                [data-testid="stMetricLabel"] {
-                    font-size: 0.85rem !important;
-                }
-                </style>
-                """, unsafe_allow_html=True)
 
                 oc1, oc2, oc3, oc4, oc5, oc6, oc7, oc8 = st.columns([1, 1, 0.8, 1.2, 1.2, 0.8, 1, 1])
                 with oc1:
@@ -2868,11 +2905,10 @@ def _render_comparacion(
     """Sección de Comparación: comparación día a día real entre dos períodos."""
 
     st.markdown("""
-    <div style="background: linear-gradient(135deg, #fafbfc 0%, #f4f5f7 100%);
-                padding: 25px; border-radius: 15px; margin-bottom: 20px;
-                border-left: 5px solid #D999B2; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
-        <h2 style="margin:0; color:#D999B2;">📊 Comparación de Períodos</h2>
-        <p style="margin:5px 0 0 0; color:#666;">
+    <div style="background:linear-gradient(135deg,#1a237e,#3949ab);padding:18px 24px;border-radius:12px;margin-bottom:16px;
+                box-shadow:0 3px 12px rgba(26,35,126,0.15);">
+        <h3 style="margin:0;color:#fff;font-size:18px;font-weight:700;">📊 Comparación de Períodos</h3>
+        <p style="margin:6px 0 0 0;color:rgba(255,255,255,0.7);font-size:13px;">
             Compara la producción día a día contra otro período.
             Se aplican los mismos filtros de Planta, Especie y Sala.
         </p>
@@ -3019,28 +3055,29 @@ def _render_comparacion(
 
     # === HEADER V/S ===
     st.markdown(f"""
-    <div style="text-align: center; margin: 15px 0;">
-        <span style="color: #7FA8C9; font-size: 18px; font-weight: bold;">📅 {lbl_a}  ({dias_a_count} días)</span>
-        <span style="color: #555; font-size: 24px; margin: 0 20px; font-weight: bold;">VS</span>
-        <span style="color: #D999B2; font-size: 18px; font-weight: bold;">📅 {lbl_b}  ({dias_b_count} días)</span>
+    <div style="text-align:center;margin:15px 0;padding:14px;background:#fff;border-radius:12px;
+                border:1px solid #e8eaed;box-shadow:0 2px 8px rgba(0,0,0,0.04);">
+        <span style="color:#1a237e;font-size:18px;font-weight:700;">📅 {lbl_a}  ({dias_a_count} días)</span>
+        <span style="color:#90A4AE;font-size:22px;margin:0 20px;font-weight:800;">VS</span>
+        <span style="color:#5C6BC0;font-size:18px;font-weight:700;">📅 {lbl_b}  ({dias_b_count} días)</span>
     </div>
     """, unsafe_allow_html=True)
 
     # === KPIs COMPARATIVOS ===
     def _kpi_card(label, icon, val_a_str, val_b_str, diff_str, pct_val, is_positive):
         """Genera HTML de una tarjeta KPI comparativa."""
-        diff_color = "#4caf50" if is_positive else "#f44336"
+        diff_color = "#2E7D32" if is_positive else "#C62828"
         arrow = "▲" if is_positive else "▼"
         pct_str = f"{pct_val:+.1f}%" if pct_val is not None else "—"
         return (
-            '<div style="background:#f8f9fa;border-radius:12px;padding:16px 14px;text-align:center;border:1px solid #e0e0e0;">'
-            f'<div style="color:#555;font-size:11px;margin-bottom:8px;text-transform:uppercase;letter-spacing:1px;">{icon} {label}</div>'
+            '<div style="background:#fff;border-radius:12px;padding:18px 14px;text-align:center;border:1px solid #e8eaed;box-shadow:0 2px 8px rgba(0,0,0,0.04);">'
+            f'<div style="color:#90A4AE;font-size:11px;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;">{icon} {label}</div>'
             '<div style="display:flex;justify-content:center;align-items:baseline;gap:12px;margin-bottom:6px;">'
-            f'<span style="color:#7FA8C9;font-size:26px;font-weight:bold;">{val_a_str}</span>'
-            '<span style="color:#555;font-size:14px;">vs</span>'
-            f'<span style="color:#D999B2;font-size:18px;font-weight:600;">{val_b_str}</span>'
+            f'<span style="color:#1a237e;font-size:26px;font-weight:800;">{val_a_str}</span>'
+            '<span style="color:#999;font-size:14px;">vs</span>'
+            f'<span style="color:#5C6BC0;font-size:18px;font-weight:600;">{val_b_str}</span>'
             '</div>'
-            f'<div style="color:{diff_color};font-size:14px;font-weight:bold;">'
+            f'<div style="color:{diff_color};font-size:14px;font-weight:700;">'
             f'{arrow} {diff_str} ({pct_str})'
             '</div></div>'
         )
@@ -3056,18 +3093,18 @@ def _render_comparacion(
     fmt_dec = lambda v: f"{v:,.0f}"
 
     diff_kg = kg_a_total - kg_b_total
-    diff_kg_color = "#4caf50" if diff_kg >= 0 else "#f44336"
+    diff_kg_color = "#2E7D32" if diff_kg >= 0 else "#C62828"
     diff_kg_sign = "+" if diff_kg >= 0 else ""
 
     cards_html = (
-        '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin:10px 0 20px 0;">'
+        '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin:10px 0 20px 0;">'
         + _fmt_kpi("Órdenes", "📋", ord_a_total, ord_b_total, fmt_int)
         + _fmt_kpi("KG Totales", "⚖️", kg_a_total, kg_b_total, fmt_dec)
         + _fmt_kpi("KG/Hora", "⚡", kgh_a, kgh_b, fmt_dec)
         + _fmt_kpi("KG/Día", "📊", prom_dia_a, prom_dia_b, fmt_dec)
-        + '<div style="background:#f8f9fa;border-radius:12px;padding:16px 14px;text-align:center;border:1px solid #e0e0e0;">'
-        + '<div style="color:#555;font-size:11px;margin-bottom:8px;text-transform:uppercase;letter-spacing:1px;">⚖️ DIFERENCIA KG</div>'
-        + f'<div style="color:{diff_kg_color};font-size:32px;font-weight:bold;">{diff_kg_sign}{diff_kg:,.0f}</div>'
+        + '<div style="background:#fff;border-radius:12px;padding:18px 14px;text-align:center;border:1px solid #e8eaed;box-shadow:0 2px 8px rgba(0,0,0,0.04);">'
+        + '<div style="color:#90A4AE;font-size:11px;margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;">⚖️ DIFERENCIA KG</div>'
+        + f'<div style="color:{diff_kg_color};font-size:32px;font-weight:800;">{diff_kg_sign}{diff_kg:,.0f}</div>'
         + '</div></div>'
     )
     st.markdown(cards_html, unsafe_allow_html=True)
