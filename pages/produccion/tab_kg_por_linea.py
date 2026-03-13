@@ -135,6 +135,7 @@ def _build_chart_kg_dia_sala(mos_list: List[Dict], title: str = "⚖️ KG Produ
     ]
 
     dia_sala_kg: Dict[str, Dict[str, float]] = defaultdict(lambda: defaultdict(float))
+    dia_sala_ordenes: Dict[str, Dict[str, int]] = defaultdict(lambda: defaultdict(int))
     dia_horas: Dict[str, float] = defaultdict(float)
     todas_salas_set = set()
 
@@ -151,8 +152,8 @@ def _build_chart_kg_dia_sala(mos_list: List[Dict], title: str = "⚖️ KG Produ
             dia_key = dt.strftime('%d/%m/%y')
         kg = mo.get('kg_pt', 0) or 0
         dia_sala_kg[dia_key][sala] += kg
-        
-        # Acumular horas del día para calcular KG/H
+        dia_sala_ordenes[dia_key][sala] += 1
+
         duracion = mo.get('duracion_horas', 0) or 0
         if duracion > 0:
             dia_horas[dia_key] += duracion
@@ -166,21 +167,26 @@ def _build_chart_kg_dia_sala(mos_list: List[Dict], title: str = "⚖️ KG Produ
         dias_sorted = sorted(dia_sala_kg.keys(), key=lambda d: datetime.strptime(d, '%d/%m/%y'))
     salas_sorted = sorted(todas_salas_set)
     color_map = {sala: colores_paleta[i % len(colores_paleta)] for i, sala in enumerate(salas_sorted)}
-    
-    # Calcular KG/H por día
-    dia_kg_hora = {}
+
+    # Totales y KG/H por día
+    total_kg_por_dia = []
+    kg_hora_por_dia = []
+    ordenes_por_dia = []
     for dia in dias_sorted:
-        total_kg_dia = sum(dia_sala_kg[dia].get(s, 0) for s in salas_sorted)
-        horas_dia = dia_horas.get(dia, 0)
-        if horas_dia > 0:
-            dia_kg_hora[dia] = round(total_kg_dia / horas_dia, 0)
-        else:
-            dia_kg_hora[dia] = 0
+        t_kg = sum(dia_sala_kg[dia].get(s, 0) for s in salas_sorted)
+        t_ord = sum(dia_sala_ordenes[dia].get(s, 0) for s in salas_sorted)
+        total_kg_por_dia.append(round(t_kg))
+        ordenes_por_dia.append(t_ord)
+        horas = dia_horas.get(dia, 0)
+        kg_hora_por_dia.append(round(t_kg / horas) if horas > 0 else 0)
 
-    # Umbral fijo para mostrar labels (mostrar si >= 1000 kg)
+    # Promedio KG/H para línea de referencia
+    total_kg_all = sum(total_kg_por_dia)
+    total_horas_all = sum(dia_horas.values())
+    prom_kgh = round(total_kg_all / total_horas_all) if total_horas_all > 0 else 0
+
+    # Umbral para labels dentro de barras
     umbral_label = 1000
-
-    # Formatter JS: mostrar valor completo con separador de miles, ocultar si es muy pequeño
     label_formatter = JsCode(
         "function(params){if(params.value<" + str(int(umbral_label)) + ")return '';return params.value.toLocaleString('en-US');}"
     ).js_code
@@ -193,6 +199,7 @@ def _build_chart_kg_dia_sala(mos_list: List[Dict], title: str = "⚖️ KG Produ
             "name": sala,
             "type": "bar",
             "stack": "total",
+            "yAxisIndex": 0,
             "data": data_vals,
             "label": {
                 "show": True,
@@ -220,44 +227,93 @@ def _build_chart_kg_dia_sala(mos_list: List[Dict], title: str = "⚖️ KG Produ
         })
     if series:
         series[-1]["itemStyle"]["borderRadius"] = [8, 8, 0, 0]
-    
-    # Agregar serie adicional para mostrar KG/H arriba de cada columna
-    # Calcular los valores totales por día para posicionar los labels
-    total_kg_por_dia = [sum(dia_sala_kg[dia].get(s, 0) for s in salas_sorted) for dia in dias_sorted]
-    
-    # Preparar data para labels de KG/H - usar valores reales en vez de None
-    kg_hora_values = [int(dia_kg_hora[dia]) if dia_kg_hora[dia] > 0 else 0 for dia in dias_sorted]
-    
-    # Crear la serie para mostrar KG/H usando markPoint en la última serie de barras
-    if series and kg_hora_values:
-        mark_points = []
-        for i, val in enumerate(kg_hora_values):
-            if val > 0:
-                mark_points.append({
-                    "xAxis": i,
-                    "yAxis": total_kg_por_dia[i],
-                    "value": f"{val} kg/h"
-                })
-        
-        if mark_points:
-            series[-1]["markPoint"] = {
-                "data": mark_points,
-                "symbol": "none",
-                "label": {
-                    "show": True,
-                    "position": "top",
-                    "distance": 8,
-                    "fontSize": 10,
-                    "fontWeight": "bold",
-                    "color": "#999",
-                    "formatter": "{c}"
-                }
-            }
 
-    # Ajustar ancho de barras según cantidad de días
+    # Serie total del día encima de las barras
+    series.append({
+        "name": "Total del día",
+        "type": "bar",
+        "stack": "total",
+        "yAxisIndex": 0,
+        "data": [0] * len(dias_sorted),
+        "itemStyle": {"color": "transparent"},
+        "label": {
+            "show": True,
+            "position": "top",
+            "fontSize": 11,
+            "fontWeight": "bold",
+            "color": "#333",
+            "formatter": JsCode(
+                "function(params){"
+                "var totals=" + str(total_kg_por_dia) + ";"
+                "var ords=" + str(ordenes_por_dia) + ";"
+                "var t=totals[params.dataIndex];"
+                "var o=ords[params.dataIndex];"
+                "return t.toLocaleString('en-US')+' kg\\n'+o+' OFs';}"
+            ).js_code
+        },
+        "tooltip": {"show": False}
+    })
+
+    # Línea de KG/Hora en eje secundario
+    series.append({
+        "name": "KG/Hora",
+        "type": "line",
+        "yAxisIndex": 1,
+        "data": kg_hora_por_dia,
+        "smooth": True,
+        "symbolSize": 8,
+        "symbol": "circle",
+        "itemStyle": {"color": "#E91E63", "borderWidth": 2, "borderColor": "#fff"},
+        "lineStyle": {"color": "#E91E63", "width": 3, "shadowColor": "rgba(233,30,99,0.3)", "shadowBlur": 6},
+        "label": {
+            "show": True,
+            "position": "top",
+            "fontSize": 10,
+            "fontWeight": "bold",
+            "color": "#E91E63",
+            "formatter": JsCode("function(p){return p.value>0?p.value.toLocaleString('en-US'):''}").js_code
+        },
+        "markLine": {
+            "silent": True,
+            "symbol": "none",
+            "data": [{
+                "yAxis": prom_kgh,
+                "lineStyle": {"color": "#E91E63", "width": 1.5, "type": "dashed"},
+                "label": {
+                    "show": True, "position": "insideEndTop",
+                    "formatter": f"Promedio: {prom_kgh:,} kg/h",
+                    "fontSize": 10, "fontWeight": "bold", "color": "#E91E63"
+                }
+            }]
+        },
+        "z": 10
+    })
+
     bar_max_width = 40 if len(dias_sorted) > 20 else 50
     for s in series:
-        s["barMaxWidth"] = bar_max_width
+        if s.get("type") == "bar":
+            s["barMaxWidth"] = bar_max_width
+
+    # Tooltip personalizado con desglose
+    tooltip_formatter = JsCode(
+        "function(params){"
+        "var totals=" + str(total_kg_por_dia) + ";"
+        "var ords=" + str(ordenes_por_dia) + ";"
+        "var idx=params[0].dataIndex;"
+        "var total=totals[idx];"
+        "var html='<div style=\"font-weight:700;font-size:13px;margin-bottom:6px;\">'+params[0].axisValue+'</div>';"
+        "html+='<div style=\"font-size:12px;color:#666;margin-bottom:8px;\">Total: <b>'+total.toLocaleString('en-US')+' kg</b> · '+ords[idx]+' órdenes</div>';"
+        "html+='<div style=\"border-top:1px solid #eee;padding-top:6px;\">';"
+        "for(var i=0;i<params.length;i++){"
+        "var p=params[i];"
+        "if(p.seriesName==='Total del día')continue;"
+        "if(p.seriesName==='KG/Hora'){html+='<div style=\"margin-top:6px;border-top:1px solid #eee;padding-top:6px;\">'+p.marker+' <b>'+p.seriesName+':</b> '+p.value.toLocaleString('en-US')+'</div>';continue;}"
+        "var pct=total>0?(p.value/total*100).toFixed(1):'0';"
+        "if(p.value>0)html+='<div style=\"margin:2px 0;\">'+p.marker+' '+p.seriesName+': <b>'+p.value.toLocaleString('en-US')+' kg</b> <span style=\"color:#999;\">('+pct+'%)</span></div>';}"
+        "html+='</div>';return html;}"
+    ).js_code
+
+    legend_data = salas_sorted + ["KG/Hora"]
 
     options = {
         "backgroundColor": "#ffffff",
@@ -271,15 +327,16 @@ def _build_chart_kg_dia_sala(mos_list: List[Dict], title: str = "⚖️ KG Produ
         "tooltip": {
             "trigger": "axis",
             "axisPointer": {"type": "shadow"},
-            "backgroundColor": "rgba(255, 255, 255, 0.96)",
+            "backgroundColor": "rgba(255, 255, 255, 0.98)",
             "borderColor": "#7FA8C9",
             "borderWidth": 2,
             "borderRadius": 8,
             "textStyle": {"color": "#333", "fontSize": 12},
-            "extraCssText": "box-shadow: 0 2px 12px rgba(0,0,0,0.15);"
+            "extraCssText": "box-shadow: 0 2px 12px rgba(0,0,0,0.15);max-width:350px;",
+            "formatter": tooltip_formatter
         },
         "legend": {
-            "data": salas_sorted,
+            "data": legend_data,
             "bottom": 0,
             "textStyle": {"color": "#666", "fontSize": 11},
             "itemGap": 12,
@@ -287,7 +344,7 @@ def _build_chart_kg_dia_sala(mos_list: List[Dict], title: str = "⚖️ KG Produ
             "type": "scroll"
         },
         "grid": {
-            "left": "3%", "right": "4%",
+            "left": "3%", "right": "6%",
             "bottom": "15%", "top": "22%",
             "containLabel": True
         },
@@ -302,14 +359,24 @@ def _build_chart_kg_dia_sala(mos_list: List[Dict], title: str = "⚖️ KG Produ
             "axisLine": {"lineStyle": {"color": "#ddd", "width": 1}},
             "axisTick": {"show": False}
         },
-        "yAxis": {
-            "type": "value",
-            "name": "⚖️ KG",
-            "nameTextStyle": {"color": "#7FA8C9", "fontSize": 13, "fontWeight": "600"},
-            "axisLabel": {"color": "#666", "fontSize": 11},
-            "splitLine": {"lineStyle": {"color": "#f0f0f0", "type": "solid"}},
-            "axisLine": {"show": False}
-        },
+        "yAxis": [
+            {
+                "type": "value",
+                "name": "⚖️ KG Producidos",
+                "nameTextStyle": {"color": "#7FA8C9", "fontSize": 13, "fontWeight": "600"},
+                "axisLabel": {"color": "#666", "fontSize": 11},
+                "splitLine": {"lineStyle": {"color": "#f0f0f0", "type": "solid"}},
+                "axisLine": {"show": False}
+            },
+            {
+                "type": "value",
+                "name": "⚡ KG/Hora",
+                "nameTextStyle": {"color": "#E91E63", "fontSize": 12, "fontWeight": "600"},
+                "axisLabel": {"color": "#E91E63", "fontSize": 10},
+                "splitLine": {"show": False},
+                "axisLine": {"lineStyle": {"color": "#E91E63", "width": 1}}
+            }
+        ],
         "series": series,
         "dataZoom": [
             {"type": "inside", "xAxisIndex": 0, "start": 0, "end": 100}
@@ -388,90 +455,13 @@ def _render_grafico_salas(mos_filtradas: List[Dict], salas_data: Dict[str, Dict]
     </div>
     """, unsafe_allow_html=True)
 
-    # ── Gráfico principal de barras apiladas ──
+    # ── Gráfico principal de barras apiladas + línea KG/Hora ──
     result = _build_chart_kg_dia_sala(mos_filtradas, agrupacion=agrupacion)
     if not result:
         return
     options, salas_sorted = result
-    altura = max(450, 380 + len(salas_sorted) * 8)
+    altura = max(500, 420 + len(salas_sorted) * 8)
     st_echarts(options=options, height=f"{altura}px")
-
-    # ── Ranking de Salas (barras horizontales) ──
-    salas_ranking = sorted(sala_kg_total.items(), key=lambda x: x[1], reverse=True)
-    ranking_salas = [s[0] for s in salas_ranking]
-    ranking_kg = [round(s[1]) for s in salas_ranking]
-    ranking_kgh = [round(sala_kg_total[s] / sala_horas_total[s]) if sala_horas_total.get(s, 0) > 0 else 0 for s, _ in salas_ranking]
-    max_kg = max(ranking_kg) if ranking_kg else 1
-
-    colores_ranking = ['#2196F3', '#F44336', '#4CAF50', '#FFC107', '#9C27B0',
-                       '#FF9800', '#00BCD4', '#E91E63', '#009688', '#673AB7']
-
-    ranking_opts = {
-        "backgroundColor": "#ffffff",
-        "title": {
-            "text": "🏆 Ranking de Salas — KG Totales",
-            "subtext": "Producción acumulada por sala en el período seleccionado",
-            "left": "center",
-            "textStyle": {"color": "#333", "fontSize": 15, "fontWeight": "600"},
-            "subtextStyle": {"color": "#888", "fontSize": 12}
-        },
-        "tooltip": {
-            "trigger": "axis",
-            "axisPointer": {"type": "shadow"},
-            "backgroundColor": "rgba(255,255,255,0.96)",
-            "borderColor": "#7FA8C9",
-            "borderWidth": 2,
-            "borderRadius": 8,
-            "textStyle": {"color": "#333", "fontSize": 12},
-        },
-        "grid": {"left": "3%", "right": "15%", "bottom": "8%", "top": "18%", "containLabel": True},
-        "xAxis": {
-            "type": "value",
-            "name": "KG",
-            "nameTextStyle": {"color": "#999", "fontSize": 11},
-            "axisLabel": {"color": "#666", "fontSize": 11},
-            "splitLine": {"lineStyle": {"color": "#f0f0f0"}},
-        },
-        "yAxis": {
-            "type": "category",
-            "data": list(reversed(ranking_salas)),
-            "axisLabel": {"color": "#333", "fontSize": 12, "fontWeight": "600"},
-            "axisLine": {"show": False},
-            "axisTick": {"show": False}
-        },
-        "series": [
-            {
-                "name": "KG Producidos",
-                "type": "bar",
-                "data": [
-                    {
-                        "value": v,
-                        "itemStyle": {
-                            "color": {
-                                "type": "linear", "x": 0, "y": 0, "x2": 1, "y2": 0,
-                                "colorStops": [
-                                    {"offset": 0, "color": colores_ranking[i % len(colores_ranking)]},
-                                    {"offset": 1, "color": colores_ranking[i % len(colores_ranking)] + "88"}
-                                ]
-                            },
-                            "borderRadius": [0, 6, 6, 0]
-                        }
-                    } for i, v in enumerate(reversed(ranking_kg))
-                ],
-                "barMaxWidth": 30,
-                "label": {
-                    "show": True,
-                    "position": "right",
-                    "fontSize": 12,
-                    "fontWeight": "bold",
-                    "color": "#555",
-                    "formatter": JsCode("function(p){return p.value.toLocaleString('en-US')+' kg';}").js_code
-                }
-            }
-        ]
-    }
-    ranking_height = max(250, 60 + len(ranking_salas) * 42)
-    st_echarts(options=ranking_opts, height=f"{ranking_height}px")
 
 
 def _render_graficos_kg_hora(mos_filtradas: List[Dict], salas_data: Dict[str, Dict], agrupacion: str = "📅 Día"):
