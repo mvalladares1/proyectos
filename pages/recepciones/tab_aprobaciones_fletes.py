@@ -1392,7 +1392,7 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
                 return f"🔴 +{dif_pct:.0f}%"
         
         # Cabeceras de la tabla
-        col_sel_h, col_oc_h, col_ruta_h, col_fecha_h, col_monto_h, col_kg_h, col_km_h, col_ppto_h, col_aprob_h, col_aprobadores_h, col_detalle_h = st.columns([0.5, 1.1, 0.7, 0.9, 0.9, 0.7, 0.7, 0.7, 0.9, 1.2, 1.0])
+        col_sel_h, col_oc_h, col_ruta_h, col_fecha_h, col_monto_h, col_kg_h, col_km_h, col_ppto_h, col_aprob_h, col_aprobadores_h, col_detalle_h = st.columns([0.35, 1.0, 0.6, 0.75, 0.8, 0.6, 0.6, 0.6, 0.8, 1.0, 0.7])
         with col_sel_h:
             st.markdown("**✅**")
         with col_oc_h:
@@ -1439,7 +1439,7 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
             # Contenedor para cada fila con expander
             with st.container():
                 # Fila principal con datos
-                col_sel, col_oc, col_ruta, col_fecha, col_monto, col_kg, col_km, col_ppto, col_aprob, col_aprobadores, col_detalle = st.columns([0.5, 1.1, 0.7, 0.9, 0.9, 0.7, 0.7, 0.7, 0.9, 1.2, 1.0])
+                col_sel, col_oc, col_ruta, col_fecha, col_monto, col_kg, col_km, col_ppto, col_aprob, col_aprobadores, col_detalle = st.columns([0.35, 1.0, 0.6, 0.75, 0.8, 0.6, 0.6, 0.6, 0.8, 1.0, 0.7])
                 
                 with col_sel:
                     cb_key = f"check_{key_proveedor}_{_row['oc_id']}_v{checkbox_version}"
@@ -1491,14 +1491,14 @@ def render_proveedor_table(proveedor: str, df_proveedor: pd.DataFrame, models, u
                     st.text(f"{_row['estado_aprobacion']}")
 
                 with col_aprobadores:
-                    st.text(f"{_row['aprobadores'][:30]}")
+                    st.text(f"{_row['aprobadores'][:22]}")
 
                 detalle_key = f"detalle_visible_{key_proveedor}_{_row['oc_id']}"
                 if detalle_key not in st.session_state:
                     st.session_state[detalle_key] = False
 
                 with col_detalle:
-                    label_detalle = "📖 Ocultar" if st.session_state[detalle_key] else "📋 Ver detalles"
+                    label_detalle = "📖 Ocultar" if st.session_state[detalle_key] else "📋 Ver"
                     if st.button(label_detalle, key=f"btn_{detalle_key}", use_container_width=True):
                         st.session_state[detalle_key] = not st.session_state[detalle_key]
 
