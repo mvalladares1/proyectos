@@ -10,13 +10,24 @@ import os
 # Ruta del archivo Excel de abastecimiento - buscar en múltiples ubicaciones
 def _get_excel_path():
     """Busca el Excel en múltiples ubicaciones posibles."""
+    env_path = os.getenv('ABASTECIMIENTO_EXCEL_PATH')
+    if env_path and os.path.exists(env_path):
+        return env_path
+
     possible_paths = [
         # Ruta relativa desde el servicio
         os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'data', 'recepcion abastecimiento tentativa V3.xlsx'),
+        # Ruta backend/data (algunos despliegues montan el archivo aquí)
+        os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'backend', 'data', 'recepcion abastecimiento tentativa V3.xlsx'),
         # Ruta desde variable de entorno si existe
         os.path.join(os.getenv('APP_ROOT', '/home/debian/rio-futuro-dashboards/app'), 'data', 'recepcion abastecimiento tentativa V3.xlsx'),
+        # Variante APP_ROOT con backend/data
+        os.path.join(os.getenv('APP_ROOT', '/home/debian/rio-futuro-dashboards/app'), 'backend', 'data', 'recepcion abastecimiento tentativa V3.xlsx'),
         # Ruta absoluta común en Linux
         '/home/debian/rio-futuro-dashboards/app/data/recepcion abastecimiento tentativa V3.xlsx',
+        # Ruta absoluta alternativa
+        '/app/data/recepcion abastecimiento tentativa V3.xlsx',
+        '/app/backend/data/recepcion abastecimiento tentativa V3.xlsx',
     ]
     
     for path in possible_paths:

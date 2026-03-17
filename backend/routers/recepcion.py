@@ -280,6 +280,8 @@ async def get_especies_abastecimiento():
     """
     try:
         return get_especies_disponibles()
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -291,6 +293,8 @@ async def get_semanas_abastecimiento():
     """
     try:
         return get_semanas_disponibles()
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
