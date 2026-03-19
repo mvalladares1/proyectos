@@ -838,15 +838,15 @@ def render(username: str, password: str):
                                 # Construir parámetros pasando las listas de filtros
                                 params_excel = {**params, 'include_prev_week': False, 'include_month_accum': False}
 
-                                # Convertir listas a strings separados por comas para query params
+                                # Pasar listas directamente para que requests envíe múltiples query params
                                 if tipo_fruta_filtro:
-                                    params_excel['tipo_fruta'] = ",".join(tipo_fruta_filtro) if isinstance(tipo_fruta_filtro, list) else tipo_fruta_filtro
+                                    params_excel['tipo_fruta'] = tipo_fruta_filtro if isinstance(tipo_fruta_filtro, list) else [tipo_fruta_filtro]
                                 if clasif_filtro:
-                                    params_excel['clasificacion'] = ",".join(clasif_filtro) if isinstance(clasif_filtro, list) else clasif_filtro
+                                    params_excel['clasificacion'] = clasif_filtro if isinstance(clasif_filtro, list) else [clasif_filtro]
                                 if manejo_filtro:
-                                    params_excel['manejo'] = ",".join(manejo_filtro) if isinstance(manejo_filtro, list) else manejo_filtro
+                                    params_excel['manejo'] = manejo_filtro if isinstance(manejo_filtro, list) else [manejo_filtro]
                                 if productor_filtro:
-                                    params_excel['productor'] = ",".join(productor_filtro) if isinstance(productor_filtro, list) else productor_filtro
+                                    params_excel['productor'] = productor_filtro if isinstance(productor_filtro, list) else [productor_filtro]
 
                                 # Pasar filtro de origen (planta) al Excel
                                 origen_filtro_usado = st.session_state.get('origen_filtro_usado', [])
