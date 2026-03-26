@@ -483,14 +483,38 @@ def _fragment_pdf_reports(username: str, password: str):
             if productores_rep:
                 productor_sel = st.selectbox("Seleccionar Productor", productores_rep, key="productor_rep_sel")
 
+                # Filtrar recepciones del productor
+                recs_prod = [r for r in recepciones_rep if r.get('productor') == productor_sel]
+
+                # Extraer frutas y manejos disponibles dinámicamente para este productor
+                _frutas_disp = set()
+                _manejos_disp = set()
+                for _r in recs_prod:
+                    for _p in (_r.get('productos') or []):
+                        if 'BANDEJ' in (_p.get('Categoria') or '').upper():
+                            continue
+                        if (_p.get('Kg Hechos') or 0) <= 0:
+                            continue
+                        _tf = (_p.get('TipoFruta') or '').strip()
+                        _mn = (_p.get('Manejo') or '').strip()
+                        if _tf:
+                            _frutas_disp.add(_tf)
+                        if _mn:
+                            _manejos_disp.add('Orgánico' if 'org' in _mn.lower() else 'Convencional')
+                if not _manejos_disp:
+                    _manejos_disp = {'Convencional'}
+
+                col_f1, col_f2 = st.columns(2)
+                with col_f1:
+                    frutas_sel = st.multiselect("🍇 Tipo Fruta", sorted(_frutas_disp), default=sorted(_frutas_disp), key="frutas_rep_sel")
+                with col_f2:
+                    manejos_sel = st.multiselect("🌱 Manejo", sorted(_manejos_disp), default=sorted(_manejos_disp), key="manejos_rep_sel")
+
                 col_btn1, col_btn2 = st.columns(2)
                 with col_btn1:
                     gen_pdf = st.button("📥 Generar PDF", type="primary", use_container_width=True)
                 with col_btn2:
                     gen_excel = st.button("📊 Generar Excel", type="secondary", use_container_width=True)
-
-                # Filtrar recepciones del productor
-                recs_prod = [r for r in recepciones_rep if r.get('productor') == productor_sel]
 
                 if gen_pdf:
                     if recs_prod:
@@ -529,6 +553,10 @@ def _fragment_pdf_reports(username: str, password: str):
                             elements.append(Paragraph("Reporte de Recepciones de Materia Prima", titulo_style))
                             elements.append(Paragraph(f"Productor: {productor_sel}", subtitulo_style))
                             elements.append(Paragraph(f"Período: {fecha_ini_rep.strftime('%d/%m/%Y')} al {fecha_fin_rep.strftime('%d/%m/%Y')}", subtitulo_style))
+                            if frutas_sel and len(frutas_sel) < len(_frutas_disp):
+                                elements.append(Paragraph(f"Fruta: {', '.join(sorted(frutas_sel))}", subtitulo_style))
+                            if manejos_sel and len(manejos_sel) < len(_manejos_disp):
+                                elements.append(Paragraph(f"Manejo: {', '.join(sorted(manejos_sel))}", subtitulo_style))
                             elements.append(Spacer(1, 15))
 
                             # Encabezados de tabla
@@ -550,6 +578,15 @@ def _fragment_pdf_reports(username: str, password: str):
                                         continue
                                     kg = p.get('Kg Hechos', 0) or 0
                                     if kg <= 0:
+                                        continue
+
+                                    # Filtrar por tipo fruta y manejo seleccionados
+                                    _tf_p = (p.get('TipoFruta') or '').strip()
+                                    _mn_p = (p.get('Manejo') or '').strip()
+                                    _mn_norm = 'Orgánico' if 'org' in _mn_p.lower() else 'Convencional'
+                                    if frutas_sel and _tf_p not in frutas_sel:
+                                        continue
+                                    if manejos_sel and _mn_norm not in manejos_sel:
                                         continue
 
                                     prod_name = (p.get('Producto') or '')[:45]
@@ -658,8 +695,19 @@ def _fragment_pdf_reports(username: str, password: str):
                             ws.cell(row=row_start+2, column=1, value=f"Período: {fecha_ini_rep.strftime('%d/%m/%Y')} al {fecha_fin_rep.strftime('%d/%m/%Y')}")
                             ws.cell(row=row_start+2, column=1).alignment = Alignment(horizontal='center')
 
-                            # Encabezados
-                            header_row = row_start + 4
+                            # Fila de filtros activos (si hay selección parcial)
+                            _filtro_parts = []
+                            if frutas_sel and len(frutas_sel) < len(_frutas_disp):
+                                _filtro_parts.append(f"Fruta: {', '.join(sorted(frutas_sel))}")
+                            if manejos_sel and len(manejos_sel) < len(_manejos_disp):
+                                _filtro_parts.append(f"Manejo: {', '.join(sorted(manejos_sel))}")
+                            if _filtro_parts:
+                                ws.merge_cells(start_row=row_start+3, start_column=1, end_row=row_start+3, end_column=9)
+                                ws.cell(row=row_start+3, column=1, value="  |  ".join(_filtro_parts))
+                                ws.cell(row=row_start+3, column=1).alignment = Alignment(horizontal='center')
+                                header_row = row_start + 5
+                            else:
+                                header_row = row_start + 4
                             headers = ["Fecha", "Guía", "Recepción", "Producto", "Kg", "$/Kg", "IQF%", "Block%", "Calif."]
                             header_fill = PatternFill(start_color="1a5276", end_color="1a5276", fill_type="solid")
                             header_font = Font(bold=True, color="FFFFFF")
@@ -695,6 +743,15 @@ def _fragment_pdf_reports(username: str, password: str):
                                         continue
                                     kg = p.get('Kg Hechos', 0) or 0
                                     if kg <= 0:
+                                        continue
+
+                                    # Filtrar por tipo fruta y manejo seleccionados
+                                    _tf_p = (p.get('TipoFruta') or '').strip()
+                                    _mn_p = (p.get('Manejo') or '').strip()
+                                    _mn_norm = 'Orgánico' if 'org' in _mn_p.lower() else 'Convencional'
+                                    if frutas_sel and _tf_p not in frutas_sel:
+                                        continue
+                                    if manejos_sel and _mn_norm not in manejos_sel:
                                         continue
 
                                     prod_name = (p.get('Producto') or '')[:45]
