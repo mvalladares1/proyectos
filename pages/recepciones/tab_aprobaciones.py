@@ -6,11 +6,16 @@ import streamlit as st
 import pandas as pd
 import requests
 from datetime import datetime, timedelta
+from pathlib import Path
 from .shared import fmt_numero, fmt_dinero, fmt_fecha, API_URL
 import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from backend.services.aprobaciones_service import get_aprobaciones, save_aprobaciones, remove_aprobaciones
+
+# Ruta del logo oficial
+BASE_DIR = Path(__file__).resolve().parents[2]
+LOGO_PATH = BASE_DIR / "data" / "RFP - LOGO OFICIAL.png"
 
 
 
@@ -478,10 +483,16 @@ def _fragment_pdf_reports(username: str, password: str):
             if productores_rep:
                 productor_sel = st.selectbox("Seleccionar Productor", productores_rep, key="productor_rep_sel")
 
-                if st.button("📥 Generar PDF", type="primary", use_container_width=True):
-                    # Filtrar recepciones del productor
-                    recs_prod = [r for r in recepciones_rep if r.get('productor') == productor_sel]
+                col_btn1, col_btn2 = st.columns(2)
+                with col_btn1:
+                    gen_pdf = st.button("📥 Generar PDF", type="primary", use_container_width=True)
+                with col_btn2:
+                    gen_excel = st.button("📊 Generar Excel", type="secondary", use_container_width=True)
 
+                # Filtrar recepciones del productor
+                recs_prod = [r for r in recepciones_rep if r.get('productor') == productor_sel]
+
+                if gen_pdf:
                     if recs_prod:
                         try:
                             from io import BytesIO
@@ -489,8 +500,8 @@ def _fragment_pdf_reports(username: str, password: str):
                             from reportlab.lib.pagesizes import letter, landscape
                             from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
                             from reportlab.lib.units import inch
-                            from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-                            from reportlab.lib.enums import TA_CENTER
+                            from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
+                            from reportlab.lib.enums import TA_CENTER, TA_LEFT
 
                             buffer = BytesIO()
                             doc = SimpleDocTemplate(buffer, pagesize=landscape(letter),
@@ -504,6 +515,17 @@ def _fragment_pdf_reports(username: str, password: str):
                                                              fontSize=9, alignment=TA_CENTER, spaceAfter=8)
 
                             elements = []
+                            
+                            # Agregar logo si existe
+                            if LOGO_PATH.exists():
+                                try:
+                                    logo = Image(str(LOGO_PATH), width=1.5*inch, height=0.75*inch)
+                                    logo.hAlign = 'LEFT'
+                                    elements.append(logo)
+                                    elements.append(Spacer(1, 10))
+                                except:
+                                    pass
+                            
                             elements.append(Paragraph("Reporte de Recepciones de Materia Prima", titulo_style))
                             elements.append(Paragraph(f"Productor: {productor_sel}", subtitulo_style))
                             elements.append(Paragraph(f"Período: {fecha_ini_rep.strftime('%d/%m/%Y')} al {fecha_fin_rep.strftime('%d/%m/%Y')}", subtitulo_style))
@@ -593,7 +615,150 @@ def _fragment_pdf_reports(username: str, password: str):
                         except ImportError:
                             st.error("⚠️ Instalar reportlab: pip install reportlab")
                         except Exception as e:
-                            st.error(f"Error: {e}")
+                            st.error(f"Error generando PDF: {e}")
+                    else:
+                        st.warning("No hay recepciones para este productor.")
+
+                if gen_excel:
+                    if recs_prod:
+                        try:
+                            from io import BytesIO
+                            from openpyxl import Workbook
+                            from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+                            from openpyxl.drawing.image import Image as XLImage
+                            from openpyxl.utils.dataframe import dataframe_to_rows
+
+                            wb = Workbook()
+                            ws = wb.active
+                            ws.title = "Recepciones"
+
+                            # Agregar logo si existe
+                            row_start = 1
+                            if LOGO_PATH.exists():
+                                try:
+                                    img = XLImage(str(LOGO_PATH))
+                                    img.width = 150
+                                    img.height = 75
+                                    ws.add_image(img, 'A1')
+                                    row_start = 6  # Dejar espacio para el logo
+                                except:
+                                    pass
+
+                            # Título
+                            ws.merge_cells(start_row=row_start, start_column=1, end_row=row_start, end_column=9)
+                            ws.cell(row=row_start, column=1, value="Reporte de Recepciones de Materia Prima")
+                            ws.cell(row=row_start, column=1).font = Font(bold=True, size=14)
+                            ws.cell(row=row_start, column=1).alignment = Alignment(horizontal='center')
+
+                            ws.merge_cells(start_row=row_start+1, start_column=1, end_row=row_start+1, end_column=9)
+                            ws.cell(row=row_start+1, column=1, value=f"Productor: {productor_sel}")
+                            ws.cell(row=row_start+1, column=1).alignment = Alignment(horizontal='center')
+
+                            ws.merge_cells(start_row=row_start+2, start_column=1, end_row=row_start+2, end_column=9)
+                            ws.cell(row=row_start+2, column=1, value=f"Período: {fecha_ini_rep.strftime('%d/%m/%Y')} al {fecha_fin_rep.strftime('%d/%m/%Y')}")
+                            ws.cell(row=row_start+2, column=1).alignment = Alignment(horizontal='center')
+
+                            # Encabezados
+                            header_row = row_start + 4
+                            headers = ["Fecha", "Guía", "Recepción", "Producto", "Kg", "$/Kg", "IQF%", "Block%", "Calif."]
+                            header_fill = PatternFill(start_color="1a5276", end_color="1a5276", fill_type="solid")
+                            header_font = Font(bold=True, color="FFFFFF")
+                            thin_border = Border(
+                                left=Side(style='thin'),
+                                right=Side(style='thin'),
+                                top=Side(style='thin'),
+                                bottom=Side(style='thin')
+                            )
+
+                            for col, header in enumerate(headers, 1):
+                                cell = ws.cell(row=header_row, column=col, value=header)
+                                cell.fill = header_fill
+                                cell.font = header_font
+                                cell.alignment = Alignment(horizontal='center')
+                                cell.border = thin_border
+
+                            # Datos
+                            data_row = header_row + 1
+                            total_kg = 0
+                            for rec in recs_prod:
+                                fecha_str = fmt_fecha(rec.get('fecha', ''))
+                                guia = rec.get('guia_despacho', '') or rec.get('x_studio_gua_de_despacho', '') or ''
+                                recepcion = rec.get('albaran', '')
+                                iqf_pct = rec.get('total_iqf', 0) or 0
+                                block_pct = rec.get('total_block', 0) or 0
+                                calific = rec.get('calific_final', '') or ''
+
+                                productos = rec.get('productos', []) or []
+                                for p in productos:
+                                    cat = (p.get('Categoria') or '').upper()
+                                    if 'BANDEJ' in cat:
+                                        continue
+                                    kg = p.get('Kg Hechos', 0) or 0
+                                    if kg <= 0:
+                                        continue
+
+                                    prod_name = (p.get('Producto') or '')[:45]
+                                    precio = p.get('Costo Unitario', 0) or 0
+
+                                    ws.cell(row=data_row, column=1, value=fecha_str).border = thin_border
+                                    ws.cell(row=data_row, column=2, value=str(guia)[:10]).border = thin_border
+                                    ws.cell(row=data_row, column=3, value=recepcion[-8:] if len(recepcion) > 8 else recepcion).border = thin_border
+                                    ws.cell(row=data_row, column=4, value=prod_name).border = thin_border
+                                    ws.cell(row=data_row, column=5, value=kg).border = thin_border
+                                    ws.cell(row=data_row, column=5).number_format = '#,##0.00'
+                                    ws.cell(row=data_row, column=6, value=precio).border = thin_border
+                                    ws.cell(row=data_row, column=6).number_format = '$#,##0'
+                                    ws.cell(row=data_row, column=7, value=f"{iqf_pct:.1f}%" if iqf_pct else "").border = thin_border
+                                    ws.cell(row=data_row, column=8, value=f"{block_pct:.1f}%" if block_pct else "").border = thin_border
+                                    ws.cell(row=data_row, column=9, value=calific[:3] if calific else "").border = thin_border
+                                    total_kg += kg
+                                    data_row += 1
+
+                            # Fila de totales
+                            total_fill = PatternFill(start_color="2980b9", end_color="2980b9", fill_type="solid")
+                            total_font = Font(bold=True, color="FFFFFF")
+                            for col in range(1, 10):
+                                ws.cell(row=data_row, column=col).fill = total_fill
+                                ws.cell(row=data_row, column=col).font = total_font
+                                ws.cell(row=data_row, column=col).border = thin_border
+                            ws.cell(row=data_row, column=4, value="TOTAL")
+                            ws.cell(row=data_row, column=5, value=total_kg)
+                            ws.cell(row=data_row, column=5).number_format = '#,##0.00'
+
+                            # Ajustar anchos de columna
+                            ws.column_dimensions['A'].width = 12
+                            ws.column_dimensions['B'].width = 10
+                            ws.column_dimensions['C'].width = 12
+                            ws.column_dimensions['D'].width = 45
+                            ws.column_dimensions['E'].width = 12
+                            ws.column_dimensions['F'].width = 12
+                            ws.column_dimensions['G'].width = 8
+                            ws.column_dimensions['H'].width = 8
+                            ws.column_dimensions['I'].width = 8
+
+                            # Guardar a buffer
+                            excel_buffer = BytesIO()
+                            wb.save(excel_buffer)
+                            excel_data = excel_buffer.getvalue()
+                            excel_buffer.close()
+
+                            # Nombre archivo
+                            prod_clean = "".join(c for c in productor_sel if c.isalnum() or c in " _-")[:25]
+                            filename_xl = f"Recepciones_{prod_clean}_{fecha_ini_rep.strftime('%Y%m%d')}.xlsx"
+
+                            st.download_button(
+                                label="⬇️ Descargar Excel",
+                                data=excel_data,
+                                file_name=filename_xl,
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                use_container_width=True
+                            )
+                            st.success(f"✅ Excel generado: {data_row - header_row - 1} líneas, {fmt_numero(total_kg, 2)} Kg")
+
+                        except ImportError as ie:
+                            st.error(f"⚠️ Instalar openpyxl: pip install openpyxl - {ie}")
+                        except Exception as e:
+                            st.error(f"Error generando Excel: {e}")
                     else:
                         st.warning("No hay recepciones para este productor.")
             else:
