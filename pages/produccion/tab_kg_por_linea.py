@@ -1848,27 +1848,35 @@ def render(username: str = None, password: str = None):
         st.warning("No hay órdenes de líneas de proceso en el período")
         return
 
-    # === EXTRAER ESPECIES Y SALAS DISPONIBLES ===
+    # === EXTRAER ESPECIES, SALAS Y TIPOS DE PROCESO DISPONIBLES ===
     especies_set = set()
     salas_set = set()
+    tipos_proceso_set = set()
     for mo in mos_all:
         esp = mo.get('especie', '') or 'Otro'
         if esp and esp != 'Otro':
             especies_set.add(esp)
         sala = mo.get('sala') or 'Sin Sala'
         salas_set.add(sala)
+        tipo_proc = mo.get('product_name', '') or ''
+        if tipo_proc:
+            tipos_proceso_set.add(tipo_proc)
 
     especies_list = sorted(especies_set)
     salas_list = sorted(salas_set)
+    tipos_proceso_list = sorted(tipos_proceso_set)
 
-    # === FILTROS SECUNDARIOS (especie + sala) ===
-    col_e, col_s = st.columns(2)
+    # === FILTROS SECUNDARIOS (especie + sala + tipo de proceso) ===
+    col_e, col_s, col_tp = st.columns(3)
     with col_e:
         especie_opciones = ["Todos"] + especies_list
         especie_sel = st.selectbox("🍓 Especie", especie_opciones, key="rend_sala_especie")
     with col_s:
         sala_opciones = ["Todos"] + salas_list
         sala_sel = st.selectbox("🏠 Sala", sala_opciones, key="rend_sala_sala")
+    with col_tp:
+        tipo_proceso_opciones = ["Todos"] + tipos_proceso_list
+        tipo_proceso_sel = st.selectbox("⚙️ Tipo de Proceso", tipo_proceso_opciones, key="rend_sala_tipo_proceso")
 
     st.markdown("---")
 
@@ -1879,6 +1887,9 @@ def render(username: str = None, password: str = None):
     if sala_sel != "Todos":
         mos_filtradas = [mo for mo in mos_filtradas
                          if (mo.get('sala') or 'Sin Sala') == sala_sel]
+    if tipo_proceso_sel != "Todos":
+        mos_filtradas = [mo for mo in mos_filtradas
+                         if mo.get('product_name', '') == tipo_proceso_sel]
 
     if not mos_filtradas:
         st.warning("No hay órdenes con los filtros seleccionados")
@@ -1933,7 +1944,7 @@ def render(username: str = None, password: str = None):
 
     # === BOTÓN DESCARGAR INFORME ===
     pdf_bytes = _generar_informe_pdf(
-        fecha_inicio, fecha_fin, planta_sel, especie_sel, sala_sel,
+        fecha_inicio, fecha_fin, planta_sel, especie_sel, sala_sel, tipo_proceso_sel,
         total_ordenes, total_kg, prom_kg_hora, hechas_total, no_hechas_total,
         salas_data, mos_filtradas
     )
@@ -2121,7 +2132,7 @@ def render(username: str = None, password: str = None):
     _render_comparacion(
         username, password,
         fecha_inicio, fecha_fin,
-        planta_sel, especie_sel, sala_sel,
+        planta_sel, especie_sel, sala_sel, tipo_proceso_sel,
         salas_data, mos_filtradas
     )
 
@@ -2169,7 +2180,7 @@ def _procesar_mos_a_salas(mos_list: List[Dict]) -> Dict[str, Dict]:
 
 
 def _generar_informe_pdf(
-    fecha_inicio, fecha_fin, planta_sel, especie_sel, sala_sel,
+    fecha_inicio, fecha_fin, planta_sel, especie_sel, sala_sel, tipo_proceso_sel,
     total_ordenes, total_kg, prom_kg_hora, hechas_total, no_hechas_total,
     salas_data, mos_filtradas
 ) -> bytes:
@@ -2246,6 +2257,8 @@ def _generar_informe_pdf(
         filtros.append(f"Especie: {especie_sel}")
     if sala_sel != "Todos":
         filtros.append(f"Sala: {sala_sel}")
+    if tipo_proceso_sel != "Todos":
+        filtros.append(f"Proceso: {tipo_proceso_sel}")
     if filtros:
         story.append(Paragraph(f"Filtros: {' | '.join(filtros)}", subtitulo_style))
 
@@ -2899,7 +2912,7 @@ def _generar_informe_pdf(
 def _render_comparacion(
     username, password,
     fecha_inicio_principal, fecha_fin_principal,
-    planta_sel, especie_sel, sala_sel,
+    planta_sel, especie_sel, sala_sel, tipo_proceso_sel,
     salas_principal, mos_principal
 ):
     """Sección de Comparación: comparación día a día real entre dos períodos."""
@@ -2910,7 +2923,7 @@ def _render_comparacion(
         <h3 style="margin:0;color:#fff;font-size:18px;font-weight:700;">📊 Comparación de Períodos</h3>
         <p style="margin:6px 0 0 0;color:rgba(255,255,255,0.7);font-size:13px;">
             Compara la producción día a día contra otro período.
-            Se aplican los mismos filtros de Planta, Especie y Sala.
+            Se aplican los mismos filtros de Planta, Especie, Sala y Tipo de Proceso.
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -2922,6 +2935,8 @@ def _render_comparacion(
         filtros_activos.append(f"🍓 {especie_sel}")
     if sala_sel != "Todos":
         filtros_activos.append(f"🏠 {sala_sel}")
+    if tipo_proceso_sel != "Todos":
+        filtros_activos.append(f"⚙️ {tipo_proceso_sel}")
     if filtros_activos:
         st.caption(f"Filtros aplicados: {' · '.join(filtros_activos)}")
 
@@ -2983,6 +2998,9 @@ def _render_comparacion(
     if sala_sel != "Todos":
         mos_comp = [mo for mo in mos_comp
                      if (mo.get('sala') or 'Sin Sala') == sala_sel]
+    if tipo_proceso_sel != "Todos":
+        mos_comp = [mo for mo in mos_comp
+                     if mo.get('product_name', '') == tipo_proceso_sel]
 
     if not mos_comp:
         st.warning("No hay órdenes con los mismos filtros en el período de comparación")

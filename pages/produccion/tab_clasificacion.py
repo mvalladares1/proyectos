@@ -149,7 +149,8 @@ def render(username: str, password: str):
             fecha_inicio_str = fecha_inicio_clas.strftime("%Y-%m-%d")
             fecha_fin_str = fecha_fin_clas.strftime("%Y-%m-%d")
             
-            # Preparar parámetros opcionales
+            # Resetear selección de grado al hacer nueva consulta
+            st.session_state["clasificacion_grado_sel"] = None
             tipo_fruta_param = None if tipo_fruta_seleccionado == "Todas" else tipo_fruta_seleccionado
             tipo_manejo_param = None if tipo_manejo_seleccionado == "Todos" else tipo_manejo_seleccionado
             
@@ -345,6 +346,14 @@ def render(username: str, password: str):
             # Selector de KPIs (Contenedor superior)
             kpis_container = st.container()
             
+            # Botón para limpiar selección del gráfico
+            col_reset, _ = st.columns([1, 5])
+            with col_reset:
+                if st.button("🔄 Ver todos los grados", key="btn_reset_grados", use_container_width=True):
+                    st.session_state.pop("echarts_clas_v1", None)
+                    st.session_state["clasificacion_grado_sel"] = None
+                    st.rerun()
+
             # Renderizar gráfico ECharts con eventos
             event = st_echarts(
                 options=options, 
@@ -353,13 +362,29 @@ def render(username: str, password: str):
                 key="echarts_clas_v1",
                 theme=theme_echarts
             )
-            
-            # Definir qué grados mostrar (ECharts devuelve el nombre directamente si se configura el evento)
-            selected_from_chart = [event] if event else []
-            
-            if selected_from_chart:
-                active_grades_names = selected_from_chart
-                active_grades_codes = [k for k, v in GRADOS_INFO.items() if v['nombre'] in selected_from_chart]
+
+            # --- Extraer nombre de grado del evento (puede llegar como str o dict) ---
+            event_grade = None
+            if event is not None:
+                if isinstance(event, dict):
+                    # st_echarts a veces devuelve el objeto params completo
+                    event_grade = event.get("name") or event.get("seriesName")
+                elif isinstance(event, str) and event.strip():
+                    event_grade = event.strip()
+                # Validar que sea un grado conocido
+                grados_conocidos = {v['nombre'] for v in GRADOS_INFO.values()}
+                if event_grade not in grados_conocidos:
+                    event_grade = None
+
+            # Persistir selección en session_state para sobrevivir reruns secundarios
+            if event_grade:
+                st.session_state["clasificacion_grado_sel"] = event_grade
+            grado_activo = st.session_state.get("clasificacion_grado_sel")
+
+            # Definir qué grados mostrar
+            if grado_activo:
+                active_grades_names = [grado_activo]
+                active_grades_codes = [k for k, v in GRADOS_INFO.items() if v['nombre'] == grado_activo]
             else:
                 active_grades_names = df_chart['Grado'].tolist()
                 active_grades_codes = df_chart['grado_num'].tolist()

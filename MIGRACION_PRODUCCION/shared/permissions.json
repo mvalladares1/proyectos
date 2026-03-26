@@ -1,0 +1,97 @@
+{
+  "dashboards": {
+    "recepciones": [],
+    "produccion": [],
+    "bandejas": [],
+    "stock": [],
+    "relacion_comercial": [
+      "fhorst@riofuturo.cl",
+      "vdominguez@riofuturo.cl",
+      "vpa@riofuturo.cl",
+      "mjaramillo@riofuturo.cl"
+    ],
+    "finanzas": [
+      "jvidaurre@riofuturo.cl",
+      "fhorst@riofuturo.cl",
+      "viturra@riofuturo.cl"
+    ],
+    "compras": [
+      "jbrandt@riofuturo.cl",
+      "jvidaurre@riofuturo.cl"
+    ],
+    "permisos": [
+      "mvalladares@riofuturo.cl"
+    ],
+    "automatizaciones": [],
+    "rendimiento": [],
+    "containers": [],
+    "pedidos_venta": [],
+    "reconciliacion": [],
+    "buenobot": [
+      "mvalladares@riofuturo.cl",
+      "jvidaurre@riofuturo.cl"
+    ]
+  },
+  "admins": [
+    "mvalladares@riofuturo.cl",
+    "jvidaurre@riofuturo.cl"
+  ],
+  "pages": {
+    "recepciones.kpis_calidad": [],
+    "recepciones.gestion_recepciones": [],
+    "recepciones.curva_abastecimiento": [
+      "fbravo@riofuturo.cl",
+      "jvidaurre@riofuturo.cl",
+      "msepulveda@riofuturo.cl"
+    ],
+    "recepciones.aprobaciones_mp": [
+      "ctapia@riofuturo.cl",
+      "asesorias@riofuturo.cl"
+    ],
+    "recepciones.aprobaciones_fletes": [
+      "msepulveda@riofuturo.cl",
+      "jvidaurre@riofuturo.cl",
+      "mvalladares@riofuturo.cl"
+    ],
+    "recepciones.pallets_recepcion": [],
+    "recepciones.proforma_fletes": [],
+    "recepciones.ajuste_proformas": [
+      "jvidaurre@riofuturo.cl",
+      "mvalladares@riofuturo.cl"
+    ],
+    "produccion.reporteria_general": [],
+    "produccion.detalle_of": [],
+    "produccion.clasificacion": [],
+    "produccion.automatizacion_of": [],
+    "stock.movimientos": [],
+    "stock.camaras": [],
+    "stock.pallets": [],
+    "stock.trazabilidad": [],
+    "finanzas.agrupado": [],
+    "finanzas.mensualizado": [],
+    "finanzas.ytd": [],
+    "finanzas.cg": [],
+    "finanzas.detalle": [],
+    "finanzas.flujo_caja": [],
+    "compras.ordenes": [],
+    "compras.lineas_credito": [],
+    "automatizaciones.crear_orden": [],
+    "automatizaciones.monitor_ordenes": [],
+    "automatizaciones.movimientos": [],
+    "automatizaciones.monitor_movimientos": [],
+    "automatizaciones.procesos": [],
+    "rendimiento.trazabilidad_pallets": [],
+    "rendimiento.diagrama_sankey": [],
+    "rendimiento.trazabilidad_inventario": [],
+    "reconciliacion.trigger_so": [],
+    "reconciliacion.reconciliar_kg": [],
+    "buenobot.qa_scan": [
+      "mvalladares@riofuturo.cl",
+      "jvidaurre@riofuturo.cl"
+    ]
+  },
+  "maintenance": {
+    "enabled": false,
+    "message": "El sistema está siendo ajustado en este momento."
+  }
+}

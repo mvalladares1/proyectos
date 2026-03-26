@@ -1,0 +1,1 @@
+"""Módulo Trigger SO Asociada."""

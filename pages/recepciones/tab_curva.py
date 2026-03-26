@@ -58,8 +58,10 @@ def render(username: str, password: str):
         resp_esp = requests.get(f"{API_URL}/api/v1/recepciones-mp/abastecimiento/especies", timeout=30)
         if resp_esp.status_code == 200:
             especies_disponibles = resp_esp.json()
-    except:
-        pass
+        else:
+            st.warning(f"No se pudieron cargar especies ({resp_esp.status_code}). Se mostrará sin filtro de especies.")
+    except Exception:
+        st.warning("No se pudieron cargar especies desde backend. Se mostrará sin filtro de especies.")
 
     st.markdown("**Filtrar por especie:**")
     especies_filtro = st.multiselect(

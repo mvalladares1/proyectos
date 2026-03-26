@@ -345,10 +345,150 @@ def render(username: str = None, password: str = None):
                 "Ver en Odoo": st.column_config.LinkColumn("🔗 Odoo", width="small", display_text="Abrir"),
             }
         )
-        
+
+        # === DESCARGA EXCEL ===
+        from datetime import date as _date
+        try:
+            excel_bytes = generar_excel_pallets(pallets_filtrados)
+            nombre_archivo = f"pallets_disponibles_{_date.today().isoformat()}.xlsx"
+            st.download_button(
+                label="📥 Descargar Excel",
+                data=excel_bytes,
+                file_name=nombre_archivo,
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                help="Descarga el Excel con todos los filtros activos: variedad, formato, cajas estimadas, antigüedad, MP/Congelado y más.",
+                use_container_width=False,
+                type="secondary",
+            )
+        except Exception as exc_xl:
+            st.warning(f"No se pudo generar el Excel: {exc_xl}")
+
         st.caption(f"Mostrando **{len(pallets_filtrados)}** pallets de {len(pallets)} totales")
     else:
         st.info("No hay pallets que coincidan con los filtros")
+
+
+def generar_excel_pallets(pallets_data: List[Dict]) -> bytes:
+    """Genera un Excel enriquecido con autofilter, filas alternas y todas las columnas de análisis."""
+    import io
+    import re
+    from datetime import date, datetime
+    import openpyxl
+    from openpyxl.styles import PatternFill, Font, Alignment
+    from openpyxl.utils import get_column_letter
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Pallets Disponibles"
+
+    today = date.today()
+
+    def extraer_info_producto(nombre: str):
+        """Extrae variedad, peso unitario y formato/envase del nombre del producto."""
+        # Patrón: [CODIGO] VARIEDAD PESO kg en FORMATO
+        m = re.search(r'\[[^\]]+\]\s+(.+?)\s+([\d]+[,\.][\d]+)\s*kg\s+en\s+(\w+)', nombre or '', re.IGNORECASE)
+        if m:
+            variedad = m.group(1).strip()
+            try:
+                peso = float(m.group(2).replace(',', '.'))
+            except Exception:
+                peso = None
+            formato = m.group(3).strip().capitalize()
+            return variedad, peso, formato
+        # Fallback: extraer todo lo que está después del código entre corchetes
+        m2 = re.match(r'\[[^\]]+\]\s+(.+)', nombre or '')
+        if m2:
+            return m2.group(1).strip(), None, None
+        return nombre or '', None, None
+
+    def calc_antiguedad(p: Dict):
+        fecha_ref = p.get('fecha_ingreso') or p.get('fecha_creacion') or ''
+        if fecha_ref:
+            try:
+                dt = datetime.strptime(str(fecha_ref)[:10], '%Y-%m-%d').date()
+                return (today - dt).days
+            except Exception:
+                pass
+        return ''
+
+    headers = [
+        'Pallet', 'Lote', 'Producto', 'Variedad', 'Formato',
+        'Peso Unitario (kg)', 'Cajas/Bandejas (est.)',
+        'Planta', 'Ubicación', 'MP o Congelado', 'Productor',
+        'KG Totales', 'Fecha Ingreso', 'Fecha Creación', 'Antigüedad (días)',
+    ]
+
+    # Estilos cabecera
+    hdr_fill = PatternFill(start_color="1A1A2E", end_color="1A1A2E", fill_type="solid")
+    hdr_font = Font(bold=True, color="E94560", size=11, name="Calibri")
+    center_align = Alignment(horizontal='center', vertical='center', wrap_text=False)
+    # Filas alternas
+    row_fill_a = PatternFill(start_color="16213E", end_color="16213E", fill_type="solid")
+    row_fill_b = PatternFill(start_color="0F3460", end_color="0F3460", fill_type="solid")
+    row_font = Font(color="DDEEFF", size=10, name="Calibri")
+    congelado_font = Font(color="4FC3F7", size=10, name="Calibri")
+    mp_font = Font(color="81C784", size=10, name="Calibri")
+
+    ws.append(headers)
+    for col_idx in range(1, len(headers) + 1):
+        cell = ws.cell(row=1, column=col_idx)
+        cell.fill = hdr_fill
+        cell.font = hdr_font
+        cell.alignment = center_align
+    ws.row_dimensions[1].height = 22
+
+    for r_idx, p in enumerate(pallets_data, 2):
+        variedad, peso_unit, formato = extraer_info_producto(p.get('producto', ''))
+        kg_total = p.get('cantidad_kg', 0)
+        cajas_est = round(kg_total / peso_unit) if peso_unit and peso_unit > 0 else ''
+        tipo_raw = p.get('tipo', 'Fresco')
+        mp_o_congelado = 'Congelado' if tipo_raw == 'Congelado' else 'Materia Prima'
+        antiguedad = calc_antiguedad(p)
+
+        row_data = [
+            p.get('pallet', ''),
+            p.get('lote', ''),
+            p.get('producto', ''),
+            variedad,
+            formato or '',
+            peso_unit if peso_unit is not None else '',
+            cajas_est,
+            p.get('planta', ''),
+            p.get('ubicacion', ''),
+            mp_o_congelado,
+            p.get('proveedor', ''),
+            kg_total,
+            p.get('fecha_ingreso', '') or '',
+            p.get('fecha_creacion', '') or '',
+            antiguedad,
+        ]
+        ws.append(row_data)
+
+        fill = row_fill_a if r_idx % 2 == 0 else row_fill_b
+        for col_idx in range(1, len(headers) + 1):
+            cell = ws.cell(row=r_idx, column=col_idx)
+            cell.fill = fill
+            # Colorear columna MP o Congelado (índice 10)
+            if col_idx == 10:
+                cell.font = congelado_font if mp_o_congelado == 'Congelado' else mp_font
+            else:
+                cell.font = row_font
+            cell.alignment = Alignment(horizontal='left', vertical='center')
+
+    # Autofilter en toda la tabla
+    ws.auto_filter.ref = f"A1:{get_column_letter(len(headers))}1"
+    # Congelar fila de cabecera
+    ws.freeze_panes = 'A2'
+
+    # Anchos de columna
+    col_widths = [18, 20, 55, 32, 12, 18, 20, 14, 32, 16, 32, 14, 15, 15, 18]
+    for i, w in enumerate(col_widths, 1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf.getvalue()
 
 
 def render_grafico_tipo(stats: Dict):
