@@ -519,7 +519,7 @@ def _fragment_pdf_reports(username: str, password: str):
                             # Agregar logo si existe
                             if LOGO_PATH.exists():
                                 try:
-                                    logo = Image(str(LOGO_PATH), width=1.8*inch, height=1.1*inch)
+                                    logo = Image(str(LOGO_PATH), width=1.8*inch, height=1.3*inch)
                                     logo.hAlign = 'LEFT'
                                     elements.append(logo)
                                     elements.append(Spacer(1, 10))
