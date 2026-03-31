@@ -1094,11 +1094,12 @@ def render_tab(username, password):
         st.metric("Monto Total", f"${total_monto:,.0f}")
     
     with col3:
-        pendientes = len(df[df['num_aprobaciones'] < 2])
+        # Pendientes = num_aprobaciones < 2 Y NO estado purchase (ya aprobadas en Odoo)
+        pendientes = len(df[(df['num_aprobaciones'] < 2) & (df['estado_oc'] != 'purchase')])
         st.metric("Pendientes", pendientes, delta=f"-{pendientes}" if pendientes > 0 else "0")
     
     with col4:
-        con_1_aprob = len(df[df['num_aprobaciones'] == 1])
+        con_1_aprob = len(df[(df['num_aprobaciones'] == 1) & (df['estado_oc'] != 'purchase')])
         st.metric("Con 1 Aprob.", con_1_aprob)
     
     with col5:
@@ -1193,12 +1194,14 @@ def render_tab(username, password):
     df_filtrado = df.copy()
     
     # Filtro de estado de aprobación
+    # IMPORTANTE: excluir OCs con estado 'purchase' de filtros pendientes,
+    # ya que pueden tener num_aprobaciones < 2 pero ya estar aprobadas en Odoo
     if filtro_aprobacion == 'Pendientes (0/2 y 1/2)':
-        df_filtrado = df_filtrado[df_filtrado['num_aprobaciones'] < 2]
+        df_filtrado = df_filtrado[(df_filtrado['num_aprobaciones'] < 2) & (df_filtrado['estado_oc'] != 'purchase')]
     elif filtro_aprobacion == 'Sin aprobar (0/2)':
-        df_filtrado = df_filtrado[df_filtrado['num_aprobaciones'] == 0]
+        df_filtrado = df_filtrado[(df_filtrado['num_aprobaciones'] == 0) & (df_filtrado['estado_oc'] != 'purchase')]
     elif filtro_aprobacion == 'Con 1 aprob. (1/2)':
-        df_filtrado = df_filtrado[df_filtrado['num_aprobaciones'] == 1]
+        df_filtrado = df_filtrado[(df_filtrado['num_aprobaciones'] == 1) & (df_filtrado['estado_oc'] != 'purchase')]
     elif filtro_aprobacion == 'Aprobadas (2/2)':
         df_filtrado = df_filtrado[(df_filtrado['num_aprobaciones'] >= 2) | (df_filtrado['estado_oc'] == 'purchase')]
     
@@ -1801,7 +1804,8 @@ def render_vista_tabla_mejorada(df: pd.DataFrame, models, uid, username, passwor
         df_proveedor = df_vista[df_vista['proveedor'] == proveedor]
         total_monto_proveedor = df_proveedor['monto'].sum()
         n_ocs = len(df_proveedor)
-        n_pendientes = len(df_proveedor[df_proveedor['num_aprobaciones'] < 2])
+        # Pendientes = num_aprobaciones < 2 Y NO estado purchase (ya aprobadas en Odoo)
+        n_pendientes = len(df_proveedor[(df_proveedor['num_aprobaciones'] < 2) & (df_proveedor['estado_oc'] != 'purchase')])
         
         # Header del proveedor con métricas
         header_text = f"🏢 **{proveedor}** | {n_ocs} OCs | ${total_monto_proveedor:,.0f}"
