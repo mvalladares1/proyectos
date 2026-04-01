@@ -189,6 +189,10 @@ def _render_documentos(fin_docs):
 
         for doc in docs:
             attachments = doc.get("attachments", [])
+            links = doc.get("linked_recepciones", [])
+            if links:
+                with st.expander(f"Recepciones vinculadas {doc.get('name', '')} ({len(links)})"):
+                    st.dataframe(pd.DataFrame(links), use_container_width=True, hide_index=True)
             if not attachments:
                 continue
             with st.expander(f"Adjuntos {doc.get('name', '')}"):
@@ -341,6 +345,13 @@ with tab2:
             columns=["Defecto", "Valor"],
         )
         st.dataframe(defectos, use_container_width=True, hide_index=True)
+
+        lineas = item.get("lineas_analisis", [])
+        st.markdown("#### Control de Calidad (líneas)")
+        if lineas:
+            st.dataframe(pd.DataFrame(lineas), use_container_width=True, hide_index=True)
+        else:
+            st.caption("Sin líneas detalladas de control de calidad")
 
         fotos = item.get("fotos", [])
         st.markdown("#### Fotos")

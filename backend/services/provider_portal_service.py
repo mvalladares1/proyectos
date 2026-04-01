@@ -497,11 +497,23 @@ class ProviderPortalDataService:
         quality_checks = self.odoo.search_read(
             "quality.check",
             [("picking_id", "in", picking_ids)],
-            ["id", "name", "picking_id", "quality_state", "point_id", "create_date"],
+            [
+                "id",
+                "name",
+                "picking_id",
+                "quality_state",
+                "point_id",
+                "create_date",
+                "x_studio_frutilla",
+                "x_studio_mp",
+                "x_studio_one2many_field_mZmK2",
+                "x_studio_one2many_field_rgA7I",
+            ],
             limit=10000,
         ) if picking_ids else []
         qc_by_picking: Dict[int, List[Dict[str, Any]]] = {}
         qc_ids: List[int] = []
+        line_to_picking: Dict[Tuple[str, int], int] = {}
         for qc in quality_checks:
             picking = qc.get("picking_id")
             picking_id = picking[0] if isinstance(picking, (list, tuple)) and picking else None
@@ -518,7 +530,16 @@ class ProviderPortalDataService:
             )
             qc_ids.append(qc.get("id"))
 
-        attachments = self._get_attachments_for_recepciones(picking_ids, qc_ids)
+            for line_id in qc.get("x_studio_frutilla", []) or []:
+                line_to_picking[("x_quality_check_line_89a53", int(line_id))] = int(picking_id)
+            for line_id in qc.get("x_studio_mp", []) or []:
+                line_to_picking[("x_quality_check_line_19657", int(line_id))] = int(picking_id)
+            for line_id in qc.get("x_studio_one2many_field_mZmK2", []) or []:
+                line_to_picking[("x_quality_check_line_89a53", int(line_id))] = int(picking_id)
+            for line_id in qc.get("x_studio_one2many_field_rgA7I", []) or []:
+                line_to_picking[("x_quality_check_line_1d183", int(line_id))] = int(picking_id)
+
+        attachments = self._get_attachments_for_recepciones(picking_ids, qc_ids, line_to_picking)
         attachments_by_recepcion: Dict[int, List[Dict[str, Any]]] = {}
         photos_by_recepcion: Dict[int, List[Dict[str, Any]]] = {}
         for attachment in attachments:
@@ -540,6 +561,7 @@ class ProviderPortalDataService:
                     "documentos": documentos,
                     "cantidad_fotos": len(fotos),
                     "cantidad_documentos": len(documentos),
+                    "lineas_analisis": item.get("lineas_analisis", []),
                 }
             )
         return resultado
@@ -549,7 +571,7 @@ class ProviderPortalDataService:
         partner_id: int,
         fecha_inicio: str,
         fecha_fin: str,
-        oc_references: Optional[List[str]] = None,
+        recepciones: Optional[List[Dict[str, Any]]] = None,
         limit: int = 500,
     ) -> Dict[str, List[Dict[str, Any]]]:
         if self.demo_mode:
@@ -578,7 +600,11 @@ class ProviderPortalDataService:
             limit=limit,
             order="invoice_date desc, create_date desc",
         )
-        oc_refs = [(ref or "").strip().upper() for ref in (oc_references or []) if (ref or "").strip()]
+        oc_refs = [
+            (item.get("oc_asociada") or "").strip().upper()
+            for item in (recepciones or [])
+            if (item.get("oc_asociada") or "").strip()
+        ]
         if oc_refs:
             docs = [
                 doc
@@ -590,6 +616,34 @@ class ProviderPortalDataService:
         attachment_map = self._get_attachments_for_account_moves(invoice_ids)
         proformas: List[Dict[str, Any]] = []
         facturas: List[Dict[str, Any]] = []
+        recepciones_index = recepciones or []
+
+        def _doc_links(doc: Dict[str, Any]) -> List[Dict[str, Any]]:
+            haystack = " ".join(
+                [
+                    str(doc.get("invoice_origin") or ""),
+                    str(doc.get("ref") or ""),
+                    str(doc.get("name") or ""),
+                ]
+            ).upper()
+            linked = []
+            for rec in recepciones_index:
+                oc = (rec.get("oc_asociada") or "").strip().upper()
+                guia = (rec.get("guia_despacho") or "").strip().upper()
+                albaran = (rec.get("albaran") or "").strip().upper()
+                if (oc and oc in haystack) or (guia and guia in haystack) or (albaran and albaran in haystack):
+                    linked.append(
+                        {
+                            "recepcion_id": rec.get("id"),
+                            "albaran": rec.get("albaran", ""),
+                            "guia_despacho": rec.get("guia_despacho", ""),
+                            "oc_asociada": rec.get("oc_asociada", ""),
+                            "fecha": rec.get("fecha", ""),
+                            "kg_recepcionados": rec.get("kg_recepcionados", 0),
+                        }
+                    )
+            return linked
+
         for doc in docs:
             row = {
                 "id": doc["id"],
@@ -602,6 +656,7 @@ class ProviderPortalDataService:
                 "state": doc.get("state") or "draft",
                 "payment_state": doc.get("payment_state") or "",
                 "attachments": attachment_map.get(doc["id"], []),
+                "linked_recepciones": _doc_links(doc),
             }
             if row["state"] == "draft":
                 proformas.append(row)
@@ -612,8 +667,7 @@ class ProviderPortalDataService:
     def get_dashboard(self, partner_id: int, fecha_inicio: str, fecha_fin: str) -> Dict[str, Any]:
         partner = self.get_partner_profile(partner_id)
         recepciones = self.get_recepciones(partner_id, fecha_inicio, fecha_fin)
-        oc_refs = [item.get("oc_asociada", "") for item in recepciones if item.get("oc_asociada")]
-        financial = self.get_financial_documents(partner_id, fecha_inicio, fecha_fin, oc_references=oc_refs)
+        financial = self.get_financial_documents(partner_id, fecha_inicio, fecha_fin, recepciones=recepciones)
         total_kg = sum(item.get("kg_recepcionados", 0) or 0 for item in recepciones)
         total_fotos = sum(item.get("cantidad_fotos", 0) for item in recepciones)
         total_guias = len({item.get("guia_despacho") for item in recepciones if item.get("guia_despacho")})
@@ -653,28 +707,50 @@ class ProviderPortalDataService:
             "mimetype": attachment.get("mimetype") or "application/octet-stream",
         }
 
-    def _get_attachments_for_recepciones(self, picking_ids: List[int], qc_ids: List[int]) -> List[Dict[str, Any]]:
-        if not picking_ids and not qc_ids:
+    def _get_attachments_for_recepciones(
+        self,
+        picking_ids: List[int],
+        qc_ids: List[int],
+        line_to_picking: Optional[Dict[Tuple[str, int], int]] = None,
+    ) -> List[Dict[str, Any]]:
+        if not picking_ids and not qc_ids and not line_to_picking:
             return []
-        domain: List[Any] = []
-        if picking_ids and qc_ids:
-            domain = [
-                "|",
-                "&", ("res_model", "=", "stock.picking"), ("res_id", "in", picking_ids),
-                "&", ("res_model", "=", "quality.check"), ("res_id", "in", qc_ids),
-            ]
-        elif picking_ids:
-            domain = [("res_model", "=", "stock.picking"), ("res_id", "in", picking_ids)]
-        else:
-            domain = [("res_model", "=", "quality.check"), ("res_id", "in", qc_ids)]
+        attachments: List[Dict[str, Any]] = []
+        if picking_ids:
+            attachments.extend(
+                self.odoo.search_read(
+                    "ir.attachment",
+                    [("res_model", "=", "stock.picking"), ("res_id", "in", picking_ids)],
+                    ["id", "name", "mimetype", "res_model", "res_id", "create_date"],
+                    limit=10000,
+                    order="create_date desc",
+                )
+            )
+        if qc_ids:
+            attachments.extend(
+                self.odoo.search_read(
+                    "ir.attachment",
+                    [("res_model", "=", "quality.check"), ("res_id", "in", qc_ids)],
+                    ["id", "name", "mimetype", "res_model", "res_id", "create_date"],
+                    limit=10000,
+                    order="create_date desc",
+                )
+            )
+        line_to_picking = line_to_picking or {}
+        for model_name in ["x_quality_check_line_89a53", "x_quality_check_line_19657", "x_quality_check_line_1d183"]:
+            model_ids = [res_id for (model, res_id), _ in line_to_picking.items() if model == model_name]
+            if not model_ids:
+                continue
+            attachments.extend(
+                self.odoo.search_read(
+                    "ir.attachment",
+                    [("res_model", "=", model_name), ("res_id", "in", model_ids)],
+                    ["id", "name", "mimetype", "res_model", "res_id", "create_date"],
+                    limit=10000,
+                    order="create_date desc",
+                )
+            )
 
-        attachments = self.odoo.search_read(
-            "ir.attachment",
-            domain,
-            ["id", "name", "mimetype", "res_model", "res_id", "create_date"],
-            limit=10000,
-            order="create_date desc",
-        )
         qc_to_picking = {}
         if qc_ids:
             quality_checks = self.odoo.read("quality.check", qc_ids, ["id", "picking_id"])
@@ -686,7 +762,12 @@ class ProviderPortalDataService:
         for attachment in attachments:
             res_model = attachment.get("res_model")
             res_id = attachment.get("res_id")
-            recepcion_id = res_id if res_model == "stock.picking" else qc_to_picking.get(res_id)
+            if res_model == "stock.picking":
+                recepcion_id = res_id
+            elif res_model == "quality.check":
+                recepcion_id = qc_to_picking.get(res_id)
+            else:
+                recepcion_id = line_to_picking.get((res_model, int(res_id)))
             if not recepcion_id:
                 continue
             result.append(
