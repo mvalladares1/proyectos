@@ -52,9 +52,9 @@ def obtener_rutas_para_ocs(oc_names: tuple) -> Dict[str, Dict]:
         return {}
     
     try:
-        # Llamar al backend con query params
-        params = '&'.join([f'oc_names={oc}' for oc in oc_names])
-        response = requests.post(f"{API_BACKEND_RUTAS}?{params}", timeout=60)
+        # Llamar al backend con body JSON (evita límite de URL)
+        payload = {'oc_names': list(oc_names), 'incluir_metadata': False}
+        response = requests.post(API_BACKEND_RUTAS, json=payload, timeout=120)
         
         if response.status_code == 200:
             data = response.json()

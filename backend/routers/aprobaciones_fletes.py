@@ -2,9 +2,15 @@
 Router para gestión de aprobaciones de OC de fletes/transportes.
 """
 
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Query, HTTPException, Body
 from typing import List, Optional
+from pydantic import BaseModel
 from backend.services.aprobaciones_fletes_service import AprobacionesFletesService
+
+
+class RutasPorOcsRequest(BaseModel):
+    oc_names: List[str]
+    incluir_metadata: bool = False
 
 router = APIRouter(prefix='/api/v1/aprobaciones-fletes', tags=['Aprobaciones Fletes'])
 
@@ -120,17 +126,14 @@ async def get_rutas_logistica(
 
 
 @router.post('/rutas-por-ocs')
-async def get_rutas_por_ocs(
-    oc_names: List[str] = Query(..., description="Lista de nombres de OC (ej: OC14095)"),
-    incluir_metadata: bool = Query(False, description="Incluir info de OCs sin ruta"),
-):
+async def get_rutas_por_ocs(request: RutasPorOcsRequest):
     """
     Obtiene rutas cruzadas con lista de OCs.
     
     Hace el cruce: OC name → RT correlativo → detalles de ruta.
     Usa endpoint live primero y backup como fallback si faltan rutas.
     
-    Args:
+    Body:
         oc_names: Lista de nombres de OC
         incluir_metadata: Si True, retorna también sin_rt y sin_ruta
     
@@ -142,16 +145,16 @@ async def get_rutas_por_ocs(
     try:
         # No necesita credenciales Odoo, solo llama a APIs de logística
         service = AprobacionesFletesService(username="", password="")
-        resultado = service.get_rutas_para_ocs(oc_names, incluir_metadata=True)
+        resultado = service.get_rutas_para_ocs(request.oc_names, incluir_metadata=True)
         
         response = {
             'success': True,
-            'total_solicitadas': len(oc_names),
+            'total_solicitadas': len(request.oc_names),
             'total_encontradas': len(resultado['rutas']),
             'data': resultado['rutas']
         }
         
-        if incluir_metadata:
+        if request.incluir_metadata:
             response['sin_rt'] = resultado['sin_rt']
             response['sin_ruta'] = resultado['sin_ruta']
         
