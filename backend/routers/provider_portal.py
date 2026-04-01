@@ -60,11 +60,17 @@ async def provider_login(request: ProviderLoginRequest, response: Response):
 async def provider_login_dev_auto(
     response: Response,
     partner_id: Optional[int] = Query(None),
+    rut: Optional[str] = Query(None),
+    internal_session_token: Optional[str] = Query(None),
 ):
     if os.getenv("ENV", "production") != "development":
         raise HTTPException(status_code=404, detail="Not found")
     try:
-        session = ProviderPortalAuthService.dev_auto_login(partner_id=partner_id)
+        session = ProviderPortalAuthService.dev_auto_login(
+            partner_id=partner_id,
+            rut=rut,
+            internal_session_token=internal_session_token or "",
+        )
         response.set_cookie(
             key="provider_portal_token",
             value=session["token"],
@@ -96,7 +102,7 @@ async def provider_me(
     token: Optional[str] = Query(None),
 ):
     _, session = _get_session(authorization, token)
-    service = ProviderPortalDataService()
+    service = ProviderPortalDataService(provider_session=session)
     partner = service.get_partner_profile(int(session["partner_id"]))
     return {"session": session, "partner": partner}
 
@@ -110,7 +116,7 @@ async def provider_dashboard(
 ):
     _, session = _get_session(authorization, token)
     try:
-        service = ProviderPortalDataService()
+        service = ProviderPortalDataService(provider_session=session)
         return service.get_dashboard(int(session["partner_id"]), fecha_inicio, fecha_fin)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
@@ -124,7 +130,7 @@ async def provider_attachment(
 ):
     _, session = _get_session(authorization, token)
     try:
-        service = ProviderPortalDataService()
+        service = ProviderPortalDataService(provider_session=session)
         content, meta = service.get_attachment_content(int(session["partner_id"]), attachment_id)
         return StreamingResponse(
             iter([content]),

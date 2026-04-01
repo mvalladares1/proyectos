@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from backend.config.settings import settings
 from backend.services.recepcion_service import get_recepciones_mp
+from backend.services.session_service import SessionService
 from shared.odoo_client import OdooClient
 
 
@@ -94,9 +95,12 @@ def _decode_token(token: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-def _technical_odoo_client() -> OdooClient:
-    username = settings.ODOO_USER or os.getenv("ODOO_USER")
-    password = settings.ODOO_PASSWORD or os.getenv("ODOO_PASSWORD")
+def _technical_odoo_client(
+    username: Optional[str] = None,
+    password: Optional[str] = None,
+) -> OdooClient:
+    username = username or settings.ODOO_USER or os.getenv("ODOO_USER")
+    password = password or settings.ODOO_PASSWORD or os.getenv("ODOO_PASSWORD")
     if not username or not password:
         raise ValueError(
             "Faltan ODOO_USER y ODOO_PASSWORD en el entorno para el portal de proveedores"
@@ -141,7 +145,7 @@ class ProviderPortalAuthService:
         return None
 
     @staticmethod
-    def _issue_session(user: Dict[str, Any]) -> Dict[str, Any]:
+    def _issue_session(user: Dict[str, Any], internal_session_token: str = "") -> Dict[str, Any]:
         now = datetime.now()
         session_id = secrets.token_hex(16)
         session = {
@@ -153,6 +157,8 @@ class ProviderPortalAuthService:
             "last_activity": now.isoformat(),
             "expires_at": (now + timedelta(hours=PROVIDER_SESSION_HOURS)).isoformat(),
         }
+        if internal_session_token and _is_development():
+            session["internal_session_token"] = internal_session_token
         sessions = ProviderPortalAuthService._load_sessions()
         sessions[session_id] = session
         ProviderPortalAuthService._save_sessions(sessions)
@@ -183,8 +189,29 @@ class ProviderPortalAuthService:
         return ProviderPortalAuthService._issue_session(user)
 
     @staticmethod
-    def dev_auto_login(partner_id: Optional[int] = None) -> Dict[str, Any]:
+    def dev_auto_login(
+        partner_id: Optional[int] = None,
+        rut: Optional[str] = None,
+        internal_session_token: str = "",
+    ) -> Dict[str, Any]:
+        runtime_username = ""
+        runtime_password = ""
+        if internal_session_token:
+            creds = SessionService.get_odoo_credentials(internal_session_token)
+            if creds:
+                runtime_username, runtime_password = creds
+
         users = ProviderPortalAuthService._load_users()
+        if not users and runtime_username and runtime_password:
+            try:
+                ProviderPortalAuthService.sync_users_from_odoo(
+                    username=runtime_username,
+                    password=runtime_password,
+                )
+            except Exception:
+                pass
+            users = ProviderPortalAuthService._load_users()
+
         if not users:
             try:
                 ProviderPortalAuthService.sync_users_from_odoo()
@@ -213,6 +240,8 @@ class ProviderPortalAuthService:
             raise ValueError("No hay proveedores disponibles para auto-login")
 
         selected: Optional[Dict[str, Any]] = None
+        if rut:
+            selected = ProviderPortalAuthService._find_user_by_rut(rut)
         if partner_id:
             selected = ProviderPortalAuthService._find_user_by_partner_id(int(partner_id))
 
@@ -226,7 +255,10 @@ class ProviderPortalAuthService:
             selected["updated_at"] = datetime.now().isoformat()
             ProviderPortalAuthService._save_users(users)
 
-        return ProviderPortalAuthService._issue_session(selected)
+        return ProviderPortalAuthService._issue_session(
+            selected,
+            internal_session_token=internal_session_token,
+        )
 
     @staticmethod
     def validate_session(token: str) -> Optional[Dict[str, Any]]:
@@ -289,8 +321,11 @@ class ProviderPortalAuthService:
         raise ValueError("RUT no encontrado en usuarios portal")
 
     @staticmethod
-    def sync_users_from_odoo() -> Dict[str, Any]:
-        odoo = _technical_odoo_client()
+    def sync_users_from_odoo(
+        username: Optional[str] = None,
+        password: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        odoo = _technical_odoo_client(username=username, password=password)
         pickings = odoo.search_read(
             "stock.picking",
             [
@@ -365,13 +400,22 @@ class ProviderPortalAuthService:
 class ProviderPortalDataService:
     """Datos visibles por un proveedor autenticado."""
 
-    def __init__(self) -> None:
+    def __init__(self, provider_session: Optional[Dict[str, Any]] = None) -> None:
         self.demo_mode = False
         try:
             self.odoo = _technical_odoo_client()
             self.odoo_username = self.odoo.username
             self.odoo_password = self.odoo.password
         except Exception:
+            session_token = (provider_session or {}).get("internal_session_token")
+            if session_token:
+                creds = SessionService.get_odoo_credentials(session_token)
+                if creds:
+                    username, password = creds
+                    self.odoo = _technical_odoo_client(username=username, password=password)
+                    self.odoo_username = self.odoo.username
+                    self.odoo_password = self.odoo.password
+                    return
             if not _is_development():
                 raise
             self.demo_mode = True

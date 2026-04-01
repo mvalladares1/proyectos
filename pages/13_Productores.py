@@ -58,6 +58,21 @@ def _provider_post(path: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     return response.json()
 
 
+def _provider_dev_auto_login(rut: str = "") -> None:
+    internal_session_token = st.session_state.get("session_token", "")
+    params = {"internal_session_token": internal_session_token}
+    if rut:
+        params["rut"] = rut
+    response = httpx.post(
+        f"{API_URL}/api/v1/provider-portal/login/dev-auto",
+        params=params,
+        timeout=60.0,
+    )
+    response.raise_for_status()
+    data = response.json()
+    st.session_state["prod_provider_token"] = data["token"]
+
+
 def _provider_download(attachment_id: int) -> tuple[bytes, str, str]:
     token = st.session_state.get("prod_provider_token")
     response = httpx.get(
@@ -185,8 +200,7 @@ st.caption("Portal integrado para consulta de recepciones, calidad, fotos, profo
 if "prod_provider_token" not in st.session_state:
     if ENV == "development":
         try:
-            data = _provider_post("/api/v1/provider-portal/login/dev-auto", {})
-            st.session_state["prod_provider_token"] = data["token"]
+            _provider_dev_auto_login(st.session_state.get("prod_selected_rut", ""))
             st.rerun()
         except Exception as exc:
             st.error(f"No se pudo iniciar sesión automática en dev: {exc}")
@@ -204,6 +218,22 @@ except Exception:
 partner = me.get("partner", {})
 st.sidebar.markdown(f"### {partner.get('name', 'Proveedor')}")
 st.sidebar.caption(partner.get("rut", ""))
+
+if ENV == "development":
+    st.sidebar.markdown("---")
+    dev_rut = st.sidebar.text_input(
+        "Filtrar por RUT (dev)",
+        value=st.session_state.get("prod_selected_rut", ""),
+        help="Deja vacío para usar el proveedor por defecto",
+    )
+    if st.sidebar.button("Aplicar RUT", use_container_width=True):
+        try:
+            st.session_state["prod_selected_rut"] = dev_rut.strip()
+            _provider_dev_auto_login(dev_rut.strip())
+            st.rerun()
+        except Exception as exc:
+            st.sidebar.error(f"No se pudo aplicar RUT: {exc}")
+
 if st.sidebar.button("Cerrar sesión proveedor", use_container_width=True):
     _provider_logout()
 
