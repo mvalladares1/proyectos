@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
+import os
 from typing import Optional
 
 from fastapi import APIRouter, Header, HTTPException, Query, Response
@@ -53,6 +54,28 @@ async def provider_login(request: ProviderLoginRequest, response: Response):
         return {"success": True, **session}
     except Exception as exc:
         raise HTTPException(status_code=401, detail=str(exc))
+
+
+@router.post("/login/dev-auto")
+async def provider_login_dev_auto(
+    response: Response,
+    partner_id: Optional[int] = Query(None),
+):
+    if os.getenv("ENV", "production") != "development":
+        raise HTTPException(status_code=404, detail="Not found")
+    try:
+        session = ProviderPortalAuthService.dev_auto_login(partner_id=partner_id)
+        response.set_cookie(
+            key="provider_portal_token",
+            value=session["token"],
+            max_age=12 * 60 * 60,
+            httponly=True,
+            samesite="lax",
+            secure=False,
+        )
+        return {"success": True, **session}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router.post("/logout")

@@ -183,6 +183,14 @@ st.markdown("## 🌱 PRODUCTORES")
 st.caption("Portal integrado para consulta de recepciones, calidad, fotos, proformas y facturas por proveedor")
 
 if "prod_provider_token" not in st.session_state:
+    if ENV == "development":
+        try:
+            data = _provider_post("/api/v1/provider-portal/login/dev-auto", {})
+            st.session_state["prod_provider_token"] = data["token"]
+            st.rerun()
+        except Exception as exc:
+            st.error(f"No se pudo iniciar sesión automática en dev: {exc}")
+            st.stop()
     _render_provider_login()
     st.stop()
 

@@ -137,19 +137,7 @@ class ProviderPortalAuthService:
         return None
 
     @staticmethod
-    def login(rut: str, password: str) -> Dict[str, Any]:
-        user = ProviderPortalAuthService._find_user_by_rut(rut)
-        if not user:
-            raise ValueError("Proveedor no encontrado en el portal")
-        if not user.get("active"):
-            raise ValueError("Usuario portal inactivo")
-        salt = user.get("password_salt")
-        password_hash = user.get("password_hash")
-        if not salt or not password_hash:
-            raise ValueError("Usuario sin clave configurada")
-        if _password_hash(password, salt) != password_hash:
-            raise ValueError("Credenciales invalidas")
-
+    def _issue_session(user: Dict[str, Any]) -> Dict[str, Any]:
         now = datetime.now()
         session_id = secrets.token_hex(16)
         session = {
@@ -174,6 +162,46 @@ class ProviderPortalAuthService:
             }
         )
         return {"token": token, **session}
+
+    @staticmethod
+    def login(rut: str, password: str) -> Dict[str, Any]:
+        user = ProviderPortalAuthService._find_user_by_rut(rut)
+        if not user:
+            raise ValueError("Proveedor no encontrado en el portal")
+        if not user.get("active"):
+            raise ValueError("Usuario portal inactivo")
+        salt = user.get("password_salt")
+        password_hash = user.get("password_hash")
+        if not salt or not password_hash:
+            raise ValueError("Usuario sin clave configurada")
+        if _password_hash(password, salt) != password_hash:
+            raise ValueError("Credenciales invalidas")
+        return ProviderPortalAuthService._issue_session(user)
+
+    @staticmethod
+    def dev_auto_login(partner_id: Optional[int] = None) -> Dict[str, Any]:
+        users = ProviderPortalAuthService._load_users()
+        if not users:
+            ProviderPortalAuthService.sync_users_from_odoo()
+            users = ProviderPortalAuthService._load_users()
+        if not users:
+            raise ValueError("No hay proveedores disponibles para auto-login")
+
+        selected: Optional[Dict[str, Any]] = None
+        if partner_id:
+            selected = ProviderPortalAuthService._find_user_by_partner_id(int(partner_id))
+
+        if not selected:
+            selected = next((u for u in users if u.get("active")), None)
+        if not selected:
+            selected = users[0]
+
+        if not selected.get("active"):
+            selected["active"] = True
+            selected["updated_at"] = datetime.now().isoformat()
+            ProviderPortalAuthService._save_users(users)
+
+        return ProviderPortalAuthService._issue_session(selected)
 
     @staticmethod
     def validate_session(token: str) -> Optional[Dict[str, Any]]:
