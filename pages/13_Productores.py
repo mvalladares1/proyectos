@@ -58,10 +58,12 @@ def _provider_post(path: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     return response.json()
 
 
-def _provider_dev_auto_login(rut: str = "") -> None:
+def _provider_dev_auto_login(rut: str = "", partner_id: int = 0) -> None:
     internal_session_token = st.session_state.get("session_token", "")
-    params = {"internal_session_token": internal_session_token}
-    if rut:
+    params: Dict[str, Any] = {"internal_session_token": internal_session_token}
+    if partner_id:
+        params["partner_id"] = partner_id
+    elif rut:
         params["rut"] = rut
     response = httpx.post(
         f"{API_URL}/api/v1/provider-portal/login/dev-auto",
@@ -71,6 +73,16 @@ def _provider_dev_auto_login(rut: str = "") -> None:
     response.raise_for_status()
     data = response.json()
     st.session_state["prod_provider_token"] = data["token"]
+
+
+@st.cache_data(ttl=300)
+def _load_dev_providers() -> list:
+    try:
+        r = httpx.get(f"{API_URL}/api/v1/provider-portal/dev-providers", timeout=30.0)
+        r.raise_for_status()
+        return r.json()
+    except Exception:
+        return []
 
 
 def _provider_download(attachment_id: int) -> tuple[bytes, str, str]:
@@ -221,18 +233,43 @@ st.sidebar.caption(partner.get("rut", ""))
 
 if ENV == "development":
     st.sidebar.markdown("---")
-    dev_rut = st.sidebar.text_input(
-        "Filtrar por RUT (dev)",
-        value=st.session_state.get("prod_selected_rut", ""),
-        help="Deja vacío para usar el proveedor por defecto",
-    )
-    if st.sidebar.button("Aplicar RUT", use_container_width=True):
-        try:
-            st.session_state["prod_selected_rut"] = dev_rut.strip()
-            _provider_dev_auto_login(dev_rut.strip())
-            st.rerun()
-        except Exception as exc:
-            st.sidebar.error(f"No se pudo aplicar RUT: {exc}")
+    st.sidebar.caption("🔧 Selector dev")
+    providers = _load_dev_providers()
+    if providers:
+        options_map = {f"{p['name']} ({p['rut']})": p for p in providers}
+        current_pid = st.session_state.get("prod_selected_partner_id", 0)
+        current_label = next(
+            (k for k, v in options_map.items() if v.get("partner_id") == current_pid),
+            None,
+        )
+        labels = list(options_map.keys())
+        default_idx = labels.index(current_label) if current_label in labels else 0
+        selected_label = st.sidebar.selectbox(
+            "Proveedor",
+            labels,
+            index=default_idx,
+            key="prod_dev_selector",
+        )
+        if st.sidebar.button("Cambiar proveedor", use_container_width=True):
+            p = options_map[selected_label]
+            try:
+                st.session_state["prod_selected_partner_id"] = p["partner_id"]
+                _provider_dev_auto_login(partner_id=int(p["partner_id"]))
+                st.rerun()
+            except Exception as exc:
+                st.sidebar.error(f"Error: {exc}")
+    else:
+        dev_rut = st.sidebar.text_input(
+            "Filtrar por RUT (dev)",
+            value=st.session_state.get("prod_selected_rut", ""),
+        )
+        if st.sidebar.button("Aplicar RUT", use_container_width=True):
+            try:
+                st.session_state["prod_selected_rut"] = dev_rut.strip()
+                _provider_dev_auto_login(rut=dev_rut.strip())
+                st.rerun()
+            except Exception as exc:
+                st.sidebar.error(f"No se pudo aplicar RUT: {exc}")
 
 if st.sidebar.button("Cerrar sesión proveedor", use_container_width=True):
     _provider_logout()

@@ -56,6 +56,23 @@ async def provider_login(request: ProviderLoginRequest, response: Response):
         raise HTTPException(status_code=401, detail=str(exc))
 
 
+@router.get("/dev-providers")
+async def provider_dev_list():
+    """Lista de proveedores disponibles (solo dev)."""
+    if os.getenv("ENV", "production") != "development":
+        raise HTTPException(status_code=404, detail="Not found")
+    users = ProviderPortalAuthService.list_users()
+    return [
+        {
+            "partner_id": u.get("partner_id"),
+            "rut": u.get("rut"),
+            "name": u.get("display_name") or u.get("name") or "Proveedor",
+        }
+        for u in users
+        if u.get("rut") and u.get("rut") != "DEV-AUTO"
+    ]
+
+
 @router.post("/login/dev-auto")
 async def provider_login_dev_auto(
     response: Response,
