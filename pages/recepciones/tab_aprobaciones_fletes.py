@@ -1120,18 +1120,21 @@ def render_tab(username, password):
     
     with col6:
         # Promedio de costo por kg en USD
-        # IMPORTANTE: Solo considerar OCs que tienen kilos REALES desde rutas de logística
-        # Excluir OCs con cantidad=1 en líneas (están hechas como 1 x total = total)
-        if 'cost_per_kg_usd' in df.columns and 'total_qnt_ruta' in df.columns:
-            # Filtrar: cost_per_kg_usd válido Y kilos reales desde la ruta > 0
-            df_con_costo = df[
-                (df['cost_per_kg_usd'].notna()) & 
-                (df['cost_per_kg_usd'] > 0) &
+        # IMPORTANTE: NO usar cost_per_kg_usd de la ruta (viene mal calculado si OC tiene qty=1)
+        # Recalcular usando: monto (CLP) / tipo_cambio / total_qnt_ruta (kg reales de logística)
+        if 'monto' in df.columns and 'total_qnt_ruta' in df.columns:
+            # Filtrar: OCs con kg reales desde logística > 0
+            df_con_kg = df[
                 (df['total_qnt_ruta'].notna()) &
-                (df['total_qnt_ruta'] > 0)
-            ]
-            if len(df_con_costo) > 0:
-                prom_costo_kg_usd = df_con_costo['cost_per_kg_usd'].mean()
+                (df['total_qnt_ruta'] > 0) &
+                (df['monto'].notna()) &
+                (df['monto'] > 0)
+            ].copy()
+            
+            if len(df_con_kg) > 0 and tipo_cambio_usd and tipo_cambio_usd > 0:
+                # Calcular costo real por kg: monto_usd / kg_reales
+                df_con_kg['costo_kg_real_usd'] = (df_con_kg['monto'] / tipo_cambio_usd) / df_con_kg['total_qnt_ruta']
+                prom_costo_kg_usd = df_con_kg['costo_kg_real_usd'].mean()
                 delta_vs_umbral = ((prom_costo_kg_usd - UMBRAL_COSTO_KG_USD) / UMBRAL_COSTO_KG_USD) * 100
                 st.metric(
                     "Prom. $/Kg USD", 
