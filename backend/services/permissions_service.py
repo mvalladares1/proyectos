@@ -23,6 +23,7 @@ ALL_DASHBOARDS = [
     "containers",
     "pedidos_venta",
     "rendimiento",
+    "productores",
     "relacion_comercial",
     "reconciliacion",
     "finanzas",
@@ -39,6 +40,7 @@ DASHBOARD_NAMES = {
     "stock": "Stock",
     "containers": "Containers",
     "rendimiento": "Rendimiento",
+    "productores": "Productores",
     "relacion_comercial": "Relación Comercial",
     "finanzas": "Finanzas",
     "estado_resultado": "Finanzas",  # Alias para compatibilidad
@@ -95,6 +97,9 @@ MODULE_PAGES: Dict[str, List[Dict[str, str]]] = {
     "rendimiento": [
         {"slug": "trazabilidad_pallets", "name": "Trazabilidad por Pallets"},
         {"slug": "diagrama_sankey", "name": "Diagrama Sankey"},
+    ],
+    "productores": [
+        {"slug": "portal_productores", "name": "Portal Productores"},
     ],
     "relacion_comercial": [
         {"slug": "dashboard", "name": "Dashboard"},
