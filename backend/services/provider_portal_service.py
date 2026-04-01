@@ -865,6 +865,47 @@ class ProviderPortalDataService:
             "mimetype": "image/jpeg",
         }
 
+    def get_document_pdf(self, partner_id: int, move_id: int) -> Tuple[bytes, Dict[str, Any]]:
+        moves = self.odoo.read(
+            "account.move",
+            [move_id],
+            ["id", "name", "partner_id", "sii_file_pdf"],
+        )
+        if not moves:
+            raise ValueError("Documento no encontrado")
+        move = moves[0]
+        partner = move.get("partner_id")
+        move_partner_id = partner[0] if isinstance(partner, (list, tuple)) and partner else None
+        if move_partner_id != partner_id:
+            raise ValueError("Sin acceso al documento")
+
+        sii_pdf = move.get("sii_file_pdf")
+        if sii_pdf:
+            return base64.b64decode(sii_pdf.encode("utf-8")), {
+                "name": f"{move.get('name') or 'documento'}.pdf",
+                "mimetype": "application/pdf",
+            }
+
+        pdf_attachments = self.odoo.search_read(
+            "ir.attachment",
+            [
+                ("res_model", "=", "account.move"),
+                ("res_id", "=", move_id),
+                ("mimetype", "=", "application/pdf"),
+            ],
+            ["id", "name", "datas", "mimetype"],
+            limit=1,
+            order="create_date desc",
+        )
+        if pdf_attachments and pdf_attachments[0].get("datas"):
+            att = pdf_attachments[0]
+            return base64.b64decode(att["datas"].encode("utf-8")), {
+                "name": att.get("name") or f"{move.get('name') or 'documento'}.pdf",
+                "mimetype": att.get("mimetype") or "application/pdf",
+            }
+
+        raise ValueError("Documento sin PDF disponible")
+
     def _assert_attachment_access(self, partner_id: int, attachment: Dict[str, Any]) -> None:
         res_model = attachment.get("res_model")
         res_id = attachment.get("res_id")

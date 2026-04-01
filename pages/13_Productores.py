@@ -48,6 +48,13 @@ st.markdown(
         margin: 0.35rem 0 0 0;
         opacity: 0.9;
     }
+    .prod-panel {
+        border: 1px solid rgba(90, 160, 130, 0.35);
+        border-radius: 10px;
+        background: linear-gradient(180deg, rgba(14, 43, 40, 0.55), rgba(11, 24, 36, 0.45));
+        padding: 0.6rem 0.8rem;
+        margin-bottom: 0.6rem;
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -134,6 +141,19 @@ def _provider_download_qc_photo(qc_id: int, field_name: str) -> tuple[bytes, str
     disposition = response.headers.get("Content-Disposition", "")
     filename = disposition.split("filename=", 1)[1] if "filename=" in disposition else f"qc_{qc_id}_{field_name}.jpg"
     return response.content, filename.strip('"'), response.headers.get("Content-Type", "image/jpeg")
+
+
+def _provider_download_document_pdf(move_id: int) -> tuple[bytes, str, str]:
+    token = st.session_state.get("prod_provider_token")
+    response = httpx.get(
+        f"{API_URL}/api/v1/provider-portal/documents/{move_id}/pdf",
+        params={"token": token},
+        timeout=120.0,
+    )
+    response.raise_for_status()
+    disposition = response.headers.get("Content-Disposition", "")
+    filename = disposition.split("filename=", 1)[1] if "filename=" in disposition else f"documento_{move_id}.pdf"
+    return response.content, filename.strip('"'), response.headers.get("Content-Type", "application/pdf")
 
 
 def _provider_logout() -> None:
@@ -258,6 +278,22 @@ def _render_documentos(fin_docs):
         for doc in docs:
             attachments = doc.get("attachments", [])
             links = doc.get("linked_recepciones", [])
+            pdf_col, info_col = st.columns([1, 3])
+            with pdf_col:
+                try:
+                    pdf_content, pdf_name, pdf_mime = _provider_download_document_pdf(int(doc["id"]))
+                    st.download_button(
+                        label="Descargar PDF",
+                        data=pdf_content,
+                        file_name=pdf_name,
+                        mime=pdf_mime,
+                        key=f"prod_pdf_move_{doc['id']}",
+                        use_container_width=True,
+                    )
+                except Exception:
+                    st.caption("PDF no disponible")
+            with info_col:
+                st.caption(f"Documento: {doc.get('name','')} | Referencia: {doc.get('ref','')}")
             if links:
                 with st.expander(f"Recepciones vinculadas {doc.get('name', '')} ({len(links)})"):
                     st.dataframe(pd.DataFrame(links), use_container_width=True, hide_index=True)
@@ -283,6 +319,16 @@ st.markdown(
         <div class='prod-hero'>
             <h3>🌱 PRODUCTORES</h3>
             <p>Vista integrada por proveedor: recepciones, control de calidad, fotos y documentos comerciales vinculados.</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+)
+st.markdown(
+        """
+        <div class='prod-panel'>
+            <strong>Resumen del flujo</strong><br/>
+            1) Selecciona proveedor y rango de fechas. 2) Revisa recepciones y QC por albarán.
+            3) En Documentos descarga PDF y valida vínculo con guías/OC.
         </div>
         """,
         unsafe_allow_html=True,
