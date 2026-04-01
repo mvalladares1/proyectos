@@ -212,7 +212,11 @@ st.caption("Portal integrado para consulta de recepciones, calidad, fotos, profo
 if "prod_provider_token" not in st.session_state:
     if ENV == "development":
         try:
-            _provider_dev_auto_login(st.session_state.get("prod_selected_rut", ""))
+            initial_partner_id = int(st.session_state.get("prod_selected_partner_id", 0) or 0)
+            if initial_partner_id:
+                _provider_dev_auto_login(partner_id=initial_partner_id)
+            else:
+                _provider_dev_auto_login(st.session_state.get("prod_selected_rut", ""))
             st.rerun()
         except Exception as exc:
             st.error(f"No se pudo iniciar sesión automática en dev: {exc}")
@@ -237,7 +241,9 @@ if ENV == "development":
     providers = _load_dev_providers()
     if providers:
         options_map = {f"{p['name']} ({p['rut']})": p for p in providers}
-        current_pid = st.session_state.get("prod_selected_partner_id", 0)
+        current_pid = int(st.session_state.get("prod_selected_partner_id", 0) or 0)
+        if not current_pid:
+            current_pid = int(partner.get("partner_id", 0) or 0)
         current_label = next(
             (k for k, v in options_map.items() if v.get("partner_id") == current_pid),
             None,
@@ -250,11 +256,13 @@ if ENV == "development":
             index=default_idx,
             key="prod_dev_selector",
         )
-        if st.sidebar.button("Cambiar proveedor", use_container_width=True):
-            p = options_map[selected_label]
+        selected_partner_id = int(options_map[selected_label]["partner_id"])
+        last_applied_pid = int(st.session_state.get("prod_last_applied_partner_id", 0) or 0)
+        if selected_partner_id != last_applied_pid:
             try:
-                st.session_state["prod_selected_partner_id"] = p["partner_id"]
-                _provider_dev_auto_login(partner_id=int(p["partner_id"]))
+                st.session_state["prod_selected_partner_id"] = selected_partner_id
+                st.session_state["prod_last_applied_partner_id"] = selected_partner_id
+                _provider_dev_auto_login(partner_id=selected_partner_id)
                 st.rerun()
             except Exception as exc:
                 st.sidebar.error(f"Error: {exc}")
