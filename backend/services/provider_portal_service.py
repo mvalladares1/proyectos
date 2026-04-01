@@ -79,6 +79,10 @@ def _date_chunks(start_date: date, end_date: date, days: int = 21) -> List[Tuple
     return chunks
 
 
+def _chunk_list(values: List[int], size: int = 200) -> List[List[int]]:
+    return [values[i : i + size] for i in range(0, len(values), size)]
+
+
 def _password_hash(password: str, salt: str) -> str:
     derived = hashlib.pbkdf2_hmac(
         "sha256",
@@ -499,15 +503,33 @@ class ProviderPortalDataService:
                 raise
             recepciones = []
             seen_ids = set()
-            for chunk_start, chunk_end in _date_chunks(start_date, end_date):
-                partial = get_recepciones_mp(
-                    self.odoo_username,
-                    self.odoo_password,
-                    chunk_start,
-                    chunk_end,
-                    productor_id=partner_id,
-                    solo_hechas=True,
-                )
+            for chunk_start, chunk_end in _date_chunks(start_date, end_date, days=14):
+                try:
+                    partial = get_recepciones_mp(
+                        self.odoo_username,
+                        self.odoo_password,
+                        chunk_start,
+                        chunk_end,
+                        productor_id=partner_id,
+                        solo_hechas=True,
+                    )
+                except Exception as sub_exc:
+                    if "IncompleteRead" not in str(sub_exc):
+                        raise
+                    # Último fallback: consulta diaria para minimizar payload.
+                    partial = []
+                    day_start = date.fromisoformat(chunk_start[:10])
+                    day_end = date.fromisoformat(chunk_end[:10])
+                    for daily_start, daily_end in _date_chunks(day_start, day_end, days=1):
+                        daily = get_recepciones_mp(
+                            self.odoo_username,
+                            self.odoo_password,
+                            daily_start,
+                            daily_end,
+                            productor_id=partner_id,
+                            solo_hechas=True,
+                        )
+                        partial.extend(daily or [])
                 for item in partial or []:
                     rec_id = item.get("id")
                     if rec_id in seen_ids:
@@ -534,10 +556,9 @@ class ProviderPortalDataService:
             return []
 
         picking_ids = [item["id"] for item in recepciones if item.get("id")]
-        quality_checks = self.odoo.search_read(
-            "quality.check",
-            [("picking_id", "in", picking_ids)],
-            [
+        quality_checks: List[Dict[str, Any]] = []
+        if picking_ids:
+            qc_fields = [
                 "id",
                 "name",
                 "picking_id",
@@ -549,9 +570,16 @@ class ProviderPortalDataService:
                 "x_studio_one2many_field_mZmK2",
                 "x_studio_one2many_field_rgA7I",
                 *self.QC_BINARY_FIELDS,
-            ],
-            limit=10000,
-        ) if picking_ids else []
+            ]
+            for ids_chunk in _chunk_list([int(x) for x in picking_ids], size=250):
+                quality_checks.extend(
+                    self.odoo.search_read(
+                        "quality.check",
+                        [("picking_id", "in", ids_chunk)],
+                        qc_fields,
+                        limit=10000,
+                    )
+                )
         qc_by_picking: Dict[int, List[Dict[str, Any]]] = {}
         qc_binary_photos_by_picking: Dict[int, List[Dict[str, Any]]] = {}
         qc_ids: List[int] = []
@@ -771,39 +799,42 @@ class ProviderPortalDataService:
             return []
         attachments: List[Dict[str, Any]] = []
         if picking_ids:
-            attachments.extend(
-                self.odoo.search_read(
-                    "ir.attachment",
-                    [("res_model", "=", "stock.picking"), ("res_id", "in", picking_ids)],
-                    ["id", "name", "mimetype", "res_model", "res_id", "create_date"],
-                    limit=10000,
-                    order="create_date desc",
+            for ids_chunk in _chunk_list([int(x) for x in picking_ids], size=300):
+                attachments.extend(
+                    self.odoo.search_read(
+                        "ir.attachment",
+                        [("res_model", "=", "stock.picking"), ("res_id", "in", ids_chunk)],
+                        ["id", "name", "mimetype", "res_model", "res_id", "create_date"],
+                        limit=10000,
+                        order="create_date desc",
+                    )
                 )
-            )
         if qc_ids:
-            attachments.extend(
-                self.odoo.search_read(
-                    "ir.attachment",
-                    [("res_model", "=", "quality.check"), ("res_id", "in", qc_ids)],
-                    ["id", "name", "mimetype", "res_model", "res_id", "create_date"],
-                    limit=10000,
-                    order="create_date desc",
+            for ids_chunk in _chunk_list([int(x) for x in qc_ids], size=300):
+                attachments.extend(
+                    self.odoo.search_read(
+                        "ir.attachment",
+                        [("res_model", "=", "quality.check"), ("res_id", "in", ids_chunk)],
+                        ["id", "name", "mimetype", "res_model", "res_id", "create_date"],
+                        limit=10000,
+                        order="create_date desc",
+                    )
                 )
-            )
         line_to_picking = line_to_picking or {}
         for model_name in ["x_quality_check_line_89a53", "x_quality_check_line_19657", "x_quality_check_line_1d183"]:
             model_ids = [res_id for (model, res_id), _ in line_to_picking.items() if model == model_name]
             if not model_ids:
                 continue
-            attachments.extend(
-                self.odoo.search_read(
-                    "ir.attachment",
-                    [("res_model", "=", model_name), ("res_id", "in", model_ids)],
-                    ["id", "name", "mimetype", "res_model", "res_id", "create_date"],
-                    limit=10000,
-                    order="create_date desc",
+            for ids_chunk in _chunk_list([int(x) for x in model_ids], size=300):
+                attachments.extend(
+                    self.odoo.search_read(
+                        "ir.attachment",
+                        [("res_model", "=", model_name), ("res_id", "in", ids_chunk)],
+                        ["id", "name", "mimetype", "res_model", "res_id", "create_date"],
+                        limit=10000,
+                        order="create_date desc",
+                    )
                 )
-            )
 
         qc_to_picking = {}
         if qc_ids:
