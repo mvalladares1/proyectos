@@ -69,6 +69,16 @@ def _date_bounds(fecha_inicio: str, fecha_fin: str) -> Tuple[str, str, date, dat
     )
 
 
+def _date_chunks(start_date: date, end_date: date, days: int = 21) -> List[Tuple[str, str]]:
+    chunks: List[Tuple[str, str]] = []
+    cur = start_date
+    while cur <= end_date:
+        chunk_end = min(cur + timedelta(days=days - 1), end_date)
+        chunks.append((f"{cur.isoformat()} 00:00:00", f"{chunk_end.isoformat()} 23:59:59"))
+        cur = chunk_end + timedelta(days=1)
+    return chunks
+
+
 def _password_hash(password: str, salt: str) -> str:
     derived = hashlib.pbkdf2_hmac(
         "sha256",
@@ -473,14 +483,37 @@ class ProviderPortalDataService:
         if self.demo_mode:
             return []
         fecha_inicio_dt, fecha_fin_dt, start_date, end_date = _date_bounds(fecha_inicio, fecha_fin)
-        recepciones = get_recepciones_mp(
-            self.odoo_username,
-            self.odoo_password,
-            fecha_inicio_dt,
-            fecha_fin_dt,
-            productor_id=partner_id,
-            solo_hechas=True,
-        )
+        try:
+            recepciones = get_recepciones_mp(
+                self.odoo_username,
+                self.odoo_password,
+                fecha_inicio_dt,
+                fecha_fin_dt,
+                productor_id=partner_id,
+                solo_hechas=True,
+            )
+        except Exception as exc:
+            # En rangos largos algunos proveedores generan respuestas XML-RPC grandes.
+            # Fallback: consultar por tramos y unificar por id.
+            if "IncompleteRead" not in str(exc):
+                raise
+            recepciones = []
+            seen_ids = set()
+            for chunk_start, chunk_end in _date_chunks(start_date, end_date):
+                partial = get_recepciones_mp(
+                    self.odoo_username,
+                    self.odoo_password,
+                    chunk_start,
+                    chunk_end,
+                    productor_id=partner_id,
+                    solo_hechas=True,
+                )
+                for item in partial or []:
+                    rec_id = item.get("id")
+                    if rec_id in seen_ids:
+                        continue
+                    seen_ids.add(rec_id)
+                    recepciones.append(item)
         if not recepciones:
             return []
 
