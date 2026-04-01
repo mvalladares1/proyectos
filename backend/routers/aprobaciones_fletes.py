@@ -119,6 +119,48 @@ async def get_rutas_logistica(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post('/rutas-por-ocs')
+async def get_rutas_por_ocs(
+    oc_names: List[str] = Query(..., description="Lista de nombres de OC (ej: OC14095)"),
+    incluir_metadata: bool = Query(False, description="Incluir info de OCs sin ruta"),
+):
+    """
+    Obtiene rutas cruzadas con lista de OCs.
+    
+    Hace el cruce: OC name → RT correlativo → detalles de ruta.
+    Usa endpoint live primero y backup como fallback si faltan rutas.
+    
+    Args:
+        oc_names: Lista de nombres de OC
+        incluir_metadata: Si True, retorna también sin_rt y sin_ruta
+    
+    Returns:
+        - data: Dict mapeando OC name → ruta data
+        - sin_rt: OCs que no tienen RT en route-ocs (nunca tendrán ruta)
+        - sin_ruta: OCs con RT pero sin datos de ruta en live/backup
+    """
+    try:
+        # No necesita credenciales Odoo, solo llama a APIs de logística
+        service = AprobacionesFletesService(username="", password="")
+        resultado = service.get_rutas_para_ocs(oc_names, incluir_metadata=True)
+        
+        response = {
+            'success': True,
+            'total_solicitadas': len(oc_names),
+            'total_encontradas': len(resultado['rutas']),
+            'data': resultado['rutas']
+        }
+        
+        if incluir_metadata:
+            response['sin_rt'] = resultado['sin_rt']
+            response['sin_ruta'] = resultado['sin_ruta']
+        
+        return response
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get('/maestro-costos')
 async def get_maestro_costos(
     username: str = Query(..., description="Usuario Odoo"),

@@ -188,15 +188,18 @@ class AprobacionesFletesService:
         
         return ocs_transportes
     
-    def get_rutas_logistica(self, con_oc: bool = True) -> List[Dict[str, Any]]:
+    def get_rutas_logistica(self, con_oc: bool = True, usar_backup: bool = False) -> List[Dict[str, Any]]:
         """
         Obtiene rutas del sistema de logística.
         
         Args:
             con_oc: Si True, solo retorna rutas con OC generada
+            usar_backup: Si True, usa el endpoint de respaldo /db/rutas
         """
+        endpoint = f"{self.API_LOGISTICA}/db/rutas" if usar_backup else f"{self.API_LOGISTICA}/rutas"
+        
         try:
-            response = requests.get(f"{self.API_LOGISTICA}/rutas", timeout=90)
+            response = requests.get(endpoint, timeout=90)
             
             if response.status_code == 200:
                 rutas = response.json()
@@ -206,18 +209,159 @@ class AprobacionesFletesService:
                 
                 return rutas
             else:
-                print(f"❌ Error al obtener rutas: {response.status_code}")
+                print(f"❌ Error al obtener rutas {'(backup)' if usar_backup else ''}: {response.status_code}")
                 return []
         
         except requests.exceptions.Timeout:
-            print(f"⏱️ Timeout al obtener rutas de logística (90s)")
+            print(f"⏱️ Timeout al obtener rutas de logística {'(backup)' if usar_backup else ''} (90s)")
             return []
         except requests.exceptions.ConnectionError as e:
-            print(f"🔌 Error de conexión con API logística: {e}")
+            print(f"🔌 Error de conexión con API logística {'(backup)' if usar_backup else ''}: {e}")
             return []
         except Exception as e:
-            print(f"❌ Error al conectar con API logística: {e}")
+            print(f"❌ Error al conectar con API logística {'(backup)' if usar_backup else ''}: {e}")
             return []
+    
+    def get_rutas_faltantes_desde_backup(self, oc_names_faltantes: List[str]) -> Dict[str, Dict]:
+        """
+        Busca rutas específicas en el endpoint de respaldo.
+        Solo carga el backup si hay OCs sin ruta en el live.
+        
+        Args:
+            oc_names_faltantes: Lista de nombres de OC sin ruta en live
+            
+        Returns:
+            Dict mapeando OC name -> ruta data
+        """
+        if not oc_names_faltantes:
+            return {}
+        
+        print(f"🔄 Buscando {len(oc_names_faltantes)} rutas faltantes en backup...")
+        
+        # Cargar rutas del backup
+        rutas_backup = self.get_rutas_logistica(con_oc=True, usar_backup=True)
+        
+        if not rutas_backup:
+            print("⚠️ No se pudo obtener rutas del backup")
+            return {}
+        
+        # Crear mapa y filtrar solo las que necesitamos
+        rutas_encontradas = {}
+        oc_names_set = set(oc_names_faltantes)
+        
+        for ruta in rutas_backup:
+            oc_name = ruta.get('purchase_order_name')
+            if oc_name in oc_names_set:
+                rutas_encontradas[oc_name] = ruta
+        
+        print(f"✅ Encontradas {len(rutas_encontradas)} rutas en backup")
+        return rutas_encontradas
+    
+    def get_route_ocs(self) -> List[Dict[str, Any]]:
+        """Obtiene tabla de relación OC ↔ Ruta desde /route-ocs"""
+        try:
+            response = requests.get(f"{self.API_LOGISTICA}/route-ocs", timeout=30)
+            
+            if response.status_code == 200:
+                return response.json()
+            else:
+                print(f"❌ Error al obtener route-ocs: {response.status_code}")
+                return []
+        
+        except requests.exceptions.Timeout:
+            print(f"⏱️ Timeout al obtener route-ocs (30s)")
+            return []
+        except Exception as e:
+            print(f"❌ Error al conectar con route-ocs: {e}")
+            return []
+    
+    def get_rutas_para_ocs(self, oc_names: List[str], incluir_metadata: bool = False) -> Dict[str, Any]:
+        """
+        Obtiene rutas para una lista de OCs, con fallback a backup.
+        
+        Flujo:
+        1. /route-ocs → mapea OC name → RT correlativo
+        2. /rutas (live) → busca detalles por RT correlativo
+        3. Si faltan RTs → /db/rutas (backup)
+        
+        Args:
+            oc_names: Lista de nombres de OC (ej: ["OC14095", "OC14096"])
+            incluir_metadata: Si True, retorna estructura con metadata adicional
+            
+        Returns:
+            Si incluir_metadata=False: Dict mapeando OC name → ruta data
+            Si incluir_metadata=True: {
+                'rutas': Dict[OC name → ruta data],
+                'sin_rt': List[OC names sin RT en route-ocs],
+                'sin_ruta': List[OC names con RT pero sin ruta en live/backup]
+            }
+        """
+        if not oc_names:
+            return {'rutas': {}, 'sin_rt': [], 'sin_ruta': []} if incluir_metadata else {}
+        
+        oc_names_set = set(oc_names)
+        
+        # 1. Obtener mapeo OC → RT desde /route-ocs
+        route_ocs = self.get_route_ocs()
+        oc_to_rt = {}
+        for item in route_ocs:
+            oc_name = item.get('purchase_order_name')
+            rt_name = item.get('route_name')
+            if oc_name in oc_names_set and rt_name:
+                oc_to_rt[oc_name] = rt_name
+        
+        # OCs que no tienen RT en route-ocs (nunca tendrán ruta)
+        sin_rt = [oc for oc in oc_names if oc not in oc_to_rt]
+        print(f"📋 {len(oc_to_rt)} OCs tienen RT, {len(sin_rt)} sin RT en route-ocs")
+        
+        if not oc_to_rt:
+            return {'rutas': {}, 'sin_rt': sin_rt, 'sin_ruta': []} if incluir_metadata else {}
+        
+        # 2. Obtener rutas live indexadas por RT name
+        rutas_live = self.get_rutas_logistica(con_oc=False, usar_backup=False)
+        rutas_by_rt = {r.get('name'): r for r in rutas_live if r.get('name')}
+        
+        # 3. Mapear OC → ruta
+        resultado = {}
+        ocs_con_rt_faltante = []  # OCs que tienen RT pero no está en live
+        
+        for oc_name, rt_name in oc_to_rt.items():
+            ruta = rutas_by_rt.get(rt_name)
+            if ruta:
+                resultado[oc_name] = ruta
+            else:
+                ocs_con_rt_faltante.append(oc_name)
+        
+        print(f"✅ {len(resultado)} rutas en live, {len(ocs_con_rt_faltante)} faltantes")
+        
+        # 4. Buscar faltantes en backup (solo si hay)
+        sin_ruta = []  # OCs con RT pero sin ruta ni en live ni backup
+        
+        if ocs_con_rt_faltante:
+            print(f"🔄 Buscando {len(ocs_con_rt_faltante)} RTs en backup...")
+            rutas_backup = self.get_rutas_logistica(con_oc=False, usar_backup=True)
+            rutas_backup_by_rt = {r.get('name'): r for r in rutas_backup if r.get('name')}
+            
+            encontradas_backup = 0
+            for oc_name in ocs_con_rt_faltante:
+                rt_name = oc_to_rt[oc_name]
+                ruta_backup = rutas_backup_by_rt.get(rt_name)
+                if ruta_backup:
+                    resultado[oc_name] = ruta_backup
+                    encontradas_backup += 1
+                else:
+                    sin_ruta.append(oc_name)  # RT existe pero no hay ruta
+            
+            print(f"✅ {encontradas_backup} en backup, {len(sin_ruta)} sin ruta en ningún lado")
+        
+        if incluir_metadata:
+            return {
+                'rutas': resultado,
+                'sin_rt': sin_rt,      # Nunca tendrán ruta (no están en route-ocs)
+                'sin_ruta': sin_ruta   # Tienen RT pero no hay datos de ruta
+            }
+        
+        return resultado
     
     def get_maestro_costos(self) -> List[Dict[str, Any]]:
         """Obtiene el maestro de costos presupuestados de rutas"""
@@ -269,8 +413,8 @@ class AprobacionesFletesService:
         # 1. Obtener OCs pendientes
         ocs = self.get_ocs_pendientes_aprobacion()
         
-        # 2. Obtener rutas con OC
-        rutas = self.get_rutas_logistica(con_oc=True)
+        # 2. Obtener rutas con OC (primero del endpoint live)
+        rutas = self.get_rutas_logistica(con_oc=True, usar_backup=False)
         
         # 3. Obtener maestro de costos
         costos_maestro = self.get_maestro_costos()
@@ -281,6 +425,15 @@ class AprobacionesFletesService:
             oc_name = ruta.get('purchase_order_name')
             if oc_name:
                 rutas_map[oc_name] = ruta
+        
+        # 4.1. Identificar OCs sin ruta en live y buscar en backup
+        oc_names_todas = [oc.get('name', '') for oc in ocs]
+        oc_names_faltantes = [name for name in oc_names_todas if name and name not in rutas_map]
+        
+        if oc_names_faltantes:
+            rutas_backup = self.get_rutas_faltantes_desde_backup(oc_names_faltantes)
+            # Agregar rutas encontradas en backup al mapa
+            rutas_map.update(rutas_backup)
         
         # 5. Consolidar datos
         datos_consolidados = []
