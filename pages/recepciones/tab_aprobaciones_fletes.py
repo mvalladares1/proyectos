@@ -131,8 +131,8 @@ def obtener_tipo_cambio_usd(_cache_key=None):
         pass
     
     # Si todo falla, usar valor por defecto
-    st.warning("⚠️ No se pudo obtener tipo de cambio USD - Usando valor de respaldo $860")
-    return 860.0
+    st.warning("⚠️ No se pudo obtener tipo de cambio USD - Usando valor de respaldo $900")
+    return 900.0
 
 
 def get_tipo_cambio():
@@ -945,23 +945,15 @@ def render_tab(username, password):
     
     # ========== VISTA PRINCIPAL ==========
     
-    # Header con botón de análisis
-    col_header, col_analisis = st.columns([4, 1])
-    with col_header:
-        st.header("🚚 Aprobaciones de Fletes y Transportes")
-    with col_analisis:
-        if st.button("📊 Análisis", key="btn_ir_analisis", help="Ver análisis financiero"):
-            st.session_state.vista_aprobaciones_fletes = 'analisis'
-            st.rerun()
-    
+    st.header("🚚 Aprobaciones de Fletes y Transportes")
     st.info("📦 Área: **TRANSPORTES** | Categoría: **SERVICIOS** | Requiere 2 aprobaciones")
     
     # Inicializar estado de sesión
     if 'datos_cargados_fletes' not in st.session_state:
         st.session_state.datos_cargados_fletes = False
     
-    # Botón para cargar datos
-    col1, col2 = st.columns([3, 1])
+    # Botones: cargar datos y análisis financiero
+    col1, col2, col3 = st.columns([3, 1, 1])
     with col1:
         st.caption(f"👤 Usuario conectado: **{username}**")
     
@@ -971,6 +963,11 @@ def render_tab(username, password):
             # Limpiar caché específico de fletes y general
             obtener_ocs_fletes_con_aprobaciones.clear()
             st.cache_data.clear()
+            st.rerun()
+    
+    with col3:
+        if st.button("📊 Análisis", key="btn_ir_analisis", help="Ver análisis financiero"):
+            st.session_state.vista_aprobaciones_fletes = 'analisis'
             st.rerun()
     
     # Si no se han cargado datos, mostrar mensaje y salir
