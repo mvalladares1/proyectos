@@ -810,44 +810,6 @@ class ProviderPortalDataService:
         attachments = self.odoo.search_read(
             "ir.attachment",
             [("res_model", "=", "account.move"), ("res_id", "in", invoice_ids)],
-
-        def get_quality_check_binary(
-            self,
-            partner_id: int,
-            qc_id: int,
-            field_name: str,
-        ) -> Tuple[bytes, Dict[str, Any]]:
-            if field_name not in self.QC_BINARY_FIELDS:
-                raise ValueError("Campo de foto no permitido")
-            checks = self.odoo.read(
-                "quality.check",
-                [qc_id],
-                ["id", "picking_id", field_name],
-            )
-            if not checks:
-                raise ValueError("Control de calidad no encontrado")
-            qc = checks[0]
-            picking = qc.get("picking_id")
-            picking_id = picking[0] if isinstance(picking, (list, tuple)) and picking else None
-            if not picking_id:
-                raise ValueError("Control de calidad sin recepción")
-
-            pickings = self.odoo.read("stock.picking", [picking_id], ["partner_id", "name"])
-            picking_partner = pickings[0].get("partner_id") if pickings else None
-            access_partner_id = picking_partner[0] if isinstance(picking_partner, (list, tuple)) and picking_partner else None
-            if access_partner_id != partner_id:
-                raise ValueError("Sin acceso a la foto")
-
-            payload = qc.get(field_name)
-            if not payload:
-                raise ValueError("Foto no disponible")
-
-            raw = base64.b64decode(payload.encode("utf-8"))
-            picking_name = (pickings[0].get("name") if pickings else "recepcion") or "recepcion"
-            return raw, {
-                "name": f"{picking_name}_{field_name}.jpg",
-                "mimetype": "image/jpeg",
-            }
             ["id", "name", "mimetype", "res_id", "create_date"],
             limit=10000,
             order="create_date desc",
@@ -864,6 +826,44 @@ class ProviderPortalDataService:
                 }
             )
         return result
+
+    def get_quality_check_binary(
+        self,
+        partner_id: int,
+        qc_id: int,
+        field_name: str,
+    ) -> Tuple[bytes, Dict[str, Any]]:
+        if field_name not in self.QC_BINARY_FIELDS:
+            raise ValueError("Campo de foto no permitido")
+        checks = self.odoo.read(
+            "quality.check",
+            [qc_id],
+            ["id", "picking_id", field_name],
+        )
+        if not checks:
+            raise ValueError("Control de calidad no encontrado")
+        qc = checks[0]
+        picking = qc.get("picking_id")
+        picking_id = picking[0] if isinstance(picking, (list, tuple)) and picking else None
+        if not picking_id:
+            raise ValueError("Control de calidad sin recepción")
+
+        pickings = self.odoo.read("stock.picking", [picking_id], ["partner_id", "name"])
+        picking_partner = pickings[0].get("partner_id") if pickings else None
+        access_partner_id = picking_partner[0] if isinstance(picking_partner, (list, tuple)) and picking_partner else None
+        if access_partner_id != partner_id:
+            raise ValueError("Sin acceso a la foto")
+
+        payload = qc.get(field_name)
+        if not payload:
+            raise ValueError("Foto no disponible")
+
+        raw = base64.b64decode(payload.encode("utf-8"))
+        picking_name = (pickings[0].get("name") if pickings else "recepcion") or "recepcion"
+        return raw, {
+            "name": f"{picking_name}_{field_name}.jpg",
+            "mimetype": "image/jpeg",
+        }
 
     def _assert_attachment_access(self, partner_id: int, attachment: Dict[str, Any]) -> None:
         res_model = attachment.get("res_model")
