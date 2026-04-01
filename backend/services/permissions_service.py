@@ -114,6 +114,7 @@ MODULE_PAGES: Dict[str, List[Dict[str, str]]] = {
         {"slug": "usuarios", "name": "Usuarios"},
         {"slug": "override_origen", "name": "Override Origen"},
         {"slug": "configuracion", "name": "Configuración"},
+        {"slug": "portal_proveedores", "name": "Portal Proveedores"},
     ],
 }
 
