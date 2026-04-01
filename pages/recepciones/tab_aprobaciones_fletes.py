@@ -12,6 +12,7 @@ import time
 import requests
 import json
 from typing import Dict, List, Optional
+import altair as alt
 
 
 URL = 'https://riofuturo.server98c6e.oerpondemand.net'
@@ -1119,9 +1120,16 @@ def render_tab(username, password):
     
     with col6:
         # Promedio de costo por kg en USD
-        # Verificar si la columna existe en el DataFrame
-        if 'cost_per_kg_usd' in df.columns:
-            df_con_costo = df[df['cost_per_kg_usd'].notna() & (df['cost_per_kg_usd'] > 0)]
+        # IMPORTANTE: Solo considerar OCs que tienen kilos REALES desde rutas de logística
+        # Excluir OCs con cantidad=1 en líneas (están hechas como 1 x total = total)
+        if 'cost_per_kg_usd' in df.columns and 'total_qnt_ruta' in df.columns:
+            # Filtrar: cost_per_kg_usd válido Y kilos reales desde la ruta > 0
+            df_con_costo = df[
+                (df['cost_per_kg_usd'].notna()) & 
+                (df['cost_per_kg_usd'] > 0) &
+                (df['total_qnt_ruta'].notna()) &
+                (df['total_qnt_ruta'] > 0)
+            ]
             if len(df_con_costo) > 0:
                 prom_costo_kg_usd = df_con_costo['cost_per_kg_usd'].mean()
                 delta_vs_umbral = ((prom_costo_kg_usd - UMBRAL_COSTO_KG_USD) / UMBRAL_COSTO_KG_USD) * 100
@@ -1132,7 +1140,7 @@ def render_tab(username, password):
                     delta_color="inverse"  # Verde si es negativo (mejor), rojo si es positivo (peor)
                 )
             else:
-                st.metric("Prom. $/Kg USD", "⚠️ Sin rutas vinculadas")
+                st.metric("Prom. $/Kg USD", "⚠️ Sin rutas con kg")
         else:
             st.metric("Prom. $/Kg USD", "⚠️ Sin datos")
     
@@ -2199,7 +2207,30 @@ def render_vista_analisis(username: str, password: str):
             }).reset_index()
             df_semana.columns = ['Semana', 'Neto', 'Total', 'Cantidad']
             
-            st.bar_chart(df_semana.set_index('Semana')[['Neto', 'Total']])
+            # Preparar datos para Altair (formato largo)
+            df_semana_long = df_semana.melt(
+                id_vars=['Semana'], 
+                value_vars=['Neto', 'Total'],
+                var_name='Tipo', 
+                value_name='Monto'
+            )
+            
+            chart = alt.Chart(df_semana_long).mark_bar().encode(
+                x=alt.X('Semana:N', axis=alt.Axis(labelAngle=-45, labelFontSize=12, titleFontSize=14)),
+                y=alt.Y('Monto:Q', axis=alt.Axis(labelFontSize=12, titleFontSize=14, format='~s')),
+                color=alt.Color('Tipo:N', scale=alt.Scale(scheme='blues')),
+                xOffset='Tipo:N'
+            ).properties(
+                height=400
+            ).configure_axis(
+                labelFontSize=12,
+                titleFontSize=14
+            ).configure_legend(
+                labelFontSize=12,
+                titleFontSize=14
+            )
+            
+            st.altair_chart(chart, use_container_width=True)
             
             with st.expander("Ver datos por semana"):
                 df_semana_fmt = df_semana.copy()
@@ -2216,7 +2247,15 @@ def render_vista_analisis(username: str, password: str):
         df_proveedor.columns = ['Proveedor', 'Neto', 'Total', 'Cantidad']
         df_proveedor = df_proveedor.sort_values('Total', ascending=False).head(15)
         
-        st.bar_chart(df_proveedor.set_index('Proveedor')['Total'])
+        chart_prov = alt.Chart(df_proveedor).mark_bar().encode(
+            x=alt.X('Total:Q', axis=alt.Axis(labelFontSize=12, titleFontSize=14, format='~s'), title='Monto Total'),
+            y=alt.Y('Proveedor:N', sort='-x', axis=alt.Axis(labelFontSize=11, titleFontSize=14)),
+            color=alt.value('#1f77b4')
+        ).properties(
+            height=400
+        )
+        
+        st.altair_chart(chart_prov, use_container_width=True)
         
         with st.expander("Ver datos por proveedor"):
             df_prov_fmt = df_proveedor.copy()
@@ -2247,11 +2286,21 @@ def render_vista_analisis(username: str, password: str):
         
         with col_g1:
             st.markdown("**Por cantidad**")
-            st.bar_chart(df_estado.set_index('Estado')['Cantidad'])
+            chart_cant = alt.Chart(df_estado).mark_bar().encode(
+                x=alt.X('Estado:N', axis=alt.Axis(labelAngle=-45, labelFontSize=11, titleFontSize=13)),
+                y=alt.Y('Cantidad:Q', axis=alt.Axis(labelFontSize=11, titleFontSize=13)),
+                color=alt.value('#2ca02c')
+            ).properties(height=300)
+            st.altair_chart(chart_cant, use_container_width=True)
         
         with col_g2:
             st.markdown("**Por monto**")
-            st.bar_chart(df_estado.set_index('Estado')['Monto'])
+            chart_monto = alt.Chart(df_estado).mark_bar().encode(
+                x=alt.X('Estado:N', axis=alt.Axis(labelAngle=-45, labelFontSize=11, titleFontSize=13)),
+                y=alt.Y('Monto:Q', axis=alt.Axis(labelFontSize=11, titleFontSize=13, format='~s')),
+                color=alt.value('#1f77b4')
+            ).properties(height=300)
+            st.altair_chart(chart_monto, use_container_width=True)
     
     # TABLA DE DETALLE
     st.markdown("---")
