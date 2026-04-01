@@ -58,6 +58,17 @@ def _normalize_rut(rut: str) -> str:
     return f"{cleaned[:-1]}-{cleaned[-1]}"
 
 
+def _date_bounds(fecha_inicio: str, fecha_fin: str) -> Tuple[str, str, date, date]:
+    start_date = date.fromisoformat(str(fecha_inicio)[:10])
+    end_date = date.fromisoformat(str(fecha_fin)[:10])
+    return (
+        f"{start_date.isoformat()} 00:00:00",
+        f"{end_date.isoformat()} 23:59:59",
+        start_date,
+        end_date,
+    )
+
+
 def _password_hash(password: str, salt: str) -> str:
     derived = hashlib.pbkdf2_hmac(
         "sha256",
@@ -454,14 +465,31 @@ class ProviderPortalDataService:
     def get_recepciones(self, partner_id: int, fecha_inicio: str, fecha_fin: str) -> List[Dict[str, Any]]:
         if self.demo_mode:
             return []
+        fecha_inicio_dt, fecha_fin_dt, start_date, end_date = _date_bounds(fecha_inicio, fecha_fin)
         recepciones = get_recepciones_mp(
             self.odoo_username,
             self.odoo_password,
-            fecha_inicio,
-            fecha_fin,
+            fecha_inicio_dt,
+            fecha_fin_dt,
             productor_id=partner_id,
             solo_hechas=True,
         )
+        if not recepciones:
+            return []
+
+        # Filtro estricto final por fecha para evitar cualquier desborde por datetime en Odoo.
+        recepciones_filtradas: List[Dict[str, Any]] = []
+        for item in recepciones:
+            raw_fecha = str(item.get("fecha") or "")[:10]
+            if not raw_fecha:
+                continue
+            try:
+                fecha_item = date.fromisoformat(raw_fecha)
+            except Exception:
+                continue
+            if start_date <= fecha_item <= end_date:
+                recepciones_filtradas.append(item)
+        recepciones = recepciones_filtradas
         if not recepciones:
             return []
 
@@ -516,15 +544,25 @@ class ProviderPortalDataService:
             )
         return resultado
 
-    def get_financial_documents(self, partner_id: int, limit: int = 200) -> Dict[str, List[Dict[str, Any]]]:
+    def get_financial_documents(
+        self,
+        partner_id: int,
+        fecha_inicio: str,
+        fecha_fin: str,
+        oc_references: Optional[List[str]] = None,
+        limit: int = 500,
+    ) -> Dict[str, List[Dict[str, Any]]]:
         if self.demo_mode:
             return {"proformas": [], "facturas": []}
+        fecha_inicio_dt, fecha_fin_dt, _, _ = _date_bounds(fecha_inicio, fecha_fin)
         docs = self.odoo.search_read(
             "account.move",
             [
                 ("partner_id", "=", partner_id),
                 ("move_type", "=", "in_invoice"),
                 ("state", "in", ["draft", "posted", "cancel"]),
+                ("invoice_date", ">=", fecha_inicio_dt[:10]),
+                ("invoice_date", "<=", fecha_fin_dt[:10]),
             ],
             [
                 "id",
@@ -540,6 +578,14 @@ class ProviderPortalDataService:
             limit=limit,
             order="invoice_date desc, create_date desc",
         )
+        oc_refs = [(ref or "").strip().upper() for ref in (oc_references or []) if (ref or "").strip()]
+        if oc_refs:
+            docs = [
+                doc
+                for doc in docs
+                if any(ref in ((doc.get("invoice_origin") or "").upper()) for ref in oc_refs)
+            ]
+
         invoice_ids = [doc["id"] for doc in docs]
         attachment_map = self._get_attachments_for_account_moves(invoice_ids)
         proformas: List[Dict[str, Any]] = []
@@ -566,7 +612,8 @@ class ProviderPortalDataService:
     def get_dashboard(self, partner_id: int, fecha_inicio: str, fecha_fin: str) -> Dict[str, Any]:
         partner = self.get_partner_profile(partner_id)
         recepciones = self.get_recepciones(partner_id, fecha_inicio, fecha_fin)
-        financial = self.get_financial_documents(partner_id)
+        oc_refs = [item.get("oc_asociada", "") for item in recepciones if item.get("oc_asociada")]
+        financial = self.get_financial_documents(partner_id, fecha_inicio, fecha_fin, oc_references=oc_refs)
         total_kg = sum(item.get("kg_recepcionados", 0) or 0 for item in recepciones)
         total_fotos = sum(item.get("cantidad_fotos", 0) for item in recepciones)
         total_guias = len({item.get("guia_despacho") for item in recepciones if item.get("guia_despacho")})
