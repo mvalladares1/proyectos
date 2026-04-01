@@ -507,7 +507,7 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
             lineas_frambuesa_alt_map[l["id"]] = l
     
     # ============ PASO 7: Construir resultado final ============
-    resultado_map: Dict[Any, Dict[str, Any]] = {}
+    resultado = []
     
     for idx, rec in enumerate(recepciones):
         # VALIDACIÓN: Asegurar que rec es un diccionario
