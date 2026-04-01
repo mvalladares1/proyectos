@@ -26,6 +26,10 @@ PROVIDER_SECRET_KEY = os.getenv(
 )
 
 
+def _is_development() -> bool:
+    return os.getenv("ENV", "production") == "development"
+
+
 def _ensure_json_file(path: Path, default_content: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if not path.exists():
@@ -182,8 +186,29 @@ class ProviderPortalAuthService:
     def dev_auto_login(partner_id: Optional[int] = None) -> Dict[str, Any]:
         users = ProviderPortalAuthService._load_users()
         if not users:
-            ProviderPortalAuthService.sync_users_from_odoo()
+            try:
+                ProviderPortalAuthService.sync_users_from_odoo()
+            except Exception:
+                # En dev permitimos iniciar sin Odoo configurado.
+                pass
             users = ProviderPortalAuthService._load_users()
+        if not users and _is_development():
+            users = [
+                {
+                    "partner_id": 0,
+                    "rut": "DEV-AUTO",
+                    "display_name": "Proveedor Demo Dev",
+                    "email": "",
+                    "phone": "",
+                    "city": "",
+                    "active": True,
+                    "password_salt": "",
+                    "password_hash": "",
+                    "created_at": datetime.now().isoformat(),
+                    "updated_at": datetime.now().isoformat(),
+                }
+            ]
+            ProviderPortalAuthService._save_users(users)
         if not users:
             raise ValueError("No hay proveedores disponibles para auto-login")
 
@@ -341,11 +366,30 @@ class ProviderPortalDataService:
     """Datos visibles por un proveedor autenticado."""
 
     def __init__(self) -> None:
-        self.odoo = _technical_odoo_client()
-        self.odoo_username = self.odoo.username
-        self.odoo_password = self.odoo.password
+        self.demo_mode = False
+        try:
+            self.odoo = _technical_odoo_client()
+            self.odoo_username = self.odoo.username
+            self.odoo_password = self.odoo.password
+        except Exception:
+            if not _is_development():
+                raise
+            self.demo_mode = True
+            self.odoo = None
+            self.odoo_username = ""
+            self.odoo_password = ""
 
     def get_partner_profile(self, partner_id: int) -> Dict[str, Any]:
+        if self.demo_mode:
+            user = ProviderPortalAuthService._find_user_by_partner_id(partner_id)
+            return {
+                "partner_id": int(user.get("partner_id", partner_id) if user else partner_id),
+                "name": (user or {}).get("display_name") or "Proveedor Demo",
+                "rut": (user or {}).get("rut") or "DEV-AUTO",
+                "email": (user or {}).get("email") or "",
+                "phone": (user or {}).get("phone") or "",
+                "city": (user or {}).get("city") or "",
+            }
         partner = self.odoo.read(
             "res.partner",
             [partner_id],
@@ -364,6 +408,8 @@ class ProviderPortalDataService:
         }
 
     def get_recepciones(self, partner_id: int, fecha_inicio: str, fecha_fin: str) -> List[Dict[str, Any]]:
+        if self.demo_mode:
+            return []
         recepciones = get_recepciones_mp(
             self.odoo_username,
             self.odoo_password,
@@ -427,6 +473,8 @@ class ProviderPortalDataService:
         return resultado
 
     def get_financial_documents(self, partner_id: int, limit: int = 200) -> Dict[str, List[Dict[str, Any]]]:
+        if self.demo_mode:
+            return {"proformas": [], "facturas": []}
         docs = self.odoo.search_read(
             "account.move",
             [
@@ -497,6 +545,8 @@ class ProviderPortalDataService:
         }
 
     def get_attachment_content(self, partner_id: int, attachment_id: int) -> Tuple[bytes, Dict[str, Any]]:
+        if self.demo_mode:
+            raise ValueError("Adjuntos no disponibles en modo dev sin Odoo")
         attachment_data = self.odoo.read(
             "ir.attachment",
             [attachment_id],
