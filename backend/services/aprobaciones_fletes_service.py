@@ -98,10 +98,12 @@ class AprobacionesFletesService:
         """
         Obtiene OCs de TRANSPORTES (FLETE) pendientes de aprobación de Máximo.
         Solo trae OCs que tengan actividad de aprobación asignada a Máximo (ID: 241).
+        
+        OPTIMIZADO: Usa consultas batch en lugar de N² queries individuales.
         """
         MAXIMO_ID = 241
         
-        # Buscar actividades de aprobación de Máximo en purchase.order
+        # 1. Buscar actividades de aprobación de Máximo
         actividades = self.odoo.search_read(
             'mail.activity',
             [
@@ -117,16 +119,18 @@ class AprobacionesFletesService:
             print("ℹ️ No hay actividades pendientes para Máximo")
             return []
         
-        # Extraer IDs de OCs
         oc_ids = [act['res_id'] for act in actividades]
         print(f"✅ {len(oc_ids)} OCs con actividad de Máximo")
         
-        # Filtrar solo TRANSPORTES (categoría SERVICIOS + producto FLETE)
+        # 2. Obtener OCs con campos de impuestos
         campos = [
-            'id', 'name', 'partner_id', 'amount_total', 'currency_id',
-            'state', 'date_order', 'user_id', 'origin',
+            'id', 'name', 'partner_id', 
+            'amount_untaxed',  # Monto NETO (sin IVA)
+            'amount_tax',      # Monto de IVA
+            'amount_total',    # Monto TOTAL (con IVA)
+            'currency_id', 'state', 'date_order', 'user_id', 'origin',
             'x_studio_categora_de_producto',
-            'notes', 'order_line'
+            'notes', 'order_line', 'invoice_ids'
         ]
         
         ocs = self.odoo.search_read(
@@ -139,54 +143,267 @@ class AprobacionesFletesService:
             limit=500
         )
         
-        # Filtrar solo las que tienen productos FLETE
-        ocs_transportes = []
-        for oc in ocs:
-            if not oc.get('order_line'):
+        if not ocs:
+            return []
+        
+        # 3. Obtener TODAS las líneas de todas las OCs en UNA consulta
+        all_oc_ids = [oc['id'] for oc in ocs]
+        all_lines = self.odoo.search_read(
+            'purchase.order.line',
+            [('order_id', 'in', all_oc_ids)],
+            ['order_id', 'product_id', 'name', 'product_qty', 'price_unit', 
+             'price_subtotal', 'price_total', 'taxes_id'],
+            limit=5000
+        )
+        
+        # 4. Obtener TODOS los productos en UNA consulta
+        product_ids = list(set(
+            line['product_id'][0] 
+            for line in all_lines 
+            if line.get('product_id')
+        ))
+        
+        productos = {}
+        if product_ids:
+            prods = self.odoo.search_read(
+                'product.product',
+                [('id', 'in', product_ids)],
+                ['id', 'name'],
+                limit=5000
+            )
+            productos = {p['id']: p['name'] for p in prods}
+        
+        # 5. Agrupar líneas por OC y verificar si tiene FLETE
+        lines_by_oc = {}
+        ocs_con_flete = set()
+        
+        for line in all_lines:
+            oc_id = line['order_id'][0] if line.get('order_id') else None
+            if not oc_id:
                 continue
             
-            # Verificar si alguna línea tiene producto FLETE
-            tiene_flete = False
-            for line_id in oc['order_line']:
-                line = self.odoo.search_read(
-                    'purchase.order.line',
-                    [('id', '=', line_id)],
-                    ['product_id'],
-                    limit=1
-                )
-                
-                if line and line[0].get('product_id'):
-                    producto = self.odoo.search_read(
-                        'product.product',
-                        [('id', '=', line[0]['product_id'][0])],
-                        ['name'],
-                        limit=1
-                    )
-                    
-                    if producto and 'FLETE' in producto[0]['name'].upper():
-                        tiene_flete = True
-                        break
+            if oc_id not in lines_by_oc:
+                lines_by_oc[oc_id] = []
             
-            if tiene_flete:
+            # Agregar nombre del producto a la línea
+            if line.get('product_id'):
+                prod_id = line['product_id'][0]
+                line['product_name'] = productos.get(prod_id, line['product_id'][1])
+                
+                # Verificar si es FLETE
+                if 'FLETE' in line['product_name'].upper():
+                    ocs_con_flete.add(oc_id)
+            
+            lines_by_oc[oc_id].append(line)
+        
+        # 6. Filtrar solo OCs con FLETE y agregar sus líneas
+        ocs_transportes = []
+        for oc in ocs:
+            if oc['id'] in ocs_con_flete:
+                oc['lines'] = lines_by_oc.get(oc['id'], [])
                 ocs_transportes.append(oc)
         
         print(f"📋 OCs de TRANSPORTES (FLETE) con actividad de Máximo: {len(ocs_transportes)}")
         
-        # Enriquecer con información de líneas
-        for oc in ocs_transportes:
-            oc_id = oc['id']
-            
-            # Obtener líneas de la OC
-            lines = self.odoo.search_read(
-                'purchase.order.line',
-                [('order_id', '=', oc_id)],
-                ['product_id', 'name', 'product_qty', 'price_unit', 'price_subtotal'],
-                limit=50
-            )
-            
-            oc['lines'] = lines
-        
         return ocs_transportes
+    
+    def get_ocs_fletes_para_analisis(
+        self, 
+        fecha_desde: str = None, 
+        fecha_hasta: str = None,
+        solo_aprobadas: bool = False,
+        incluir_facturas: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Obtiene OCs de fletes con datos completos para análisis financiero.
+        
+        Incluye:
+        - Montos netos (sin IVA) y totales (con IVA)
+        - Desglose por producto/línea
+        - Información de facturas asociadas
+        
+        Args:
+            fecha_desde: Fecha inicio (YYYY-MM-DD), default 90 días atrás
+            fecha_hasta: Fecha fin (YYYY-MM-DD), default hoy
+            solo_aprobadas: Si True, solo OCs en estado 'purchase' o 'done'
+            incluir_facturas: Si True, trae info de facturas asociadas
+            
+        Returns:
+            Dict con resumen y detalle de OCs
+        """
+        if not fecha_desde:
+            fecha_desde = (datetime.now() - timedelta(days=90)).strftime('%Y-%m-%d')
+        if not fecha_hasta:
+            fecha_hasta = datetime.now().strftime('%Y-%m-%d')
+        
+        # Construir dominio
+        domain = [
+            ('date_order', '>=', fecha_desde),
+            ('date_order', '<=', fecha_hasta),
+            ('x_studio_categora_de_producto', '=', 'SERVICIOS'),
+        ]
+        
+        if solo_aprobadas:
+            domain.append(('state', 'in', ['purchase', 'done']))
+        
+        # Campos completos para análisis
+        campos = [
+            'id', 'name', 'partner_id', 
+            'amount_untaxed', 'amount_tax', 'amount_total',
+            'currency_id', 'state', 'date_order', 'date_approve',
+            'user_id', 'origin', 'invoice_ids', 'invoice_status',
+            'x_studio_categora_de_producto',
+            'order_line'
+        ]
+        
+        ocs = self.odoo.search_read('purchase.order', domain, campos, limit=2000)
+        
+        if not ocs:
+            return {
+                'resumen': {'total_ocs': 0},
+                'ocs': [],
+                'por_proveedor': {},
+                'por_mes': {}
+            }
+        
+        # Obtener líneas en batch
+        all_oc_ids = [oc['id'] for oc in ocs]
+        all_lines = self.odoo.search_read(
+            'purchase.order.line',
+            [('order_id', 'in', all_oc_ids)],
+            ['order_id', 'product_id', 'name', 'product_qty', 
+             'price_unit', 'price_subtotal', 'price_total'],
+            limit=10000
+        )
+        
+        # Obtener productos
+        product_ids = list(set(
+            line['product_id'][0] for line in all_lines if line.get('product_id')
+        ))
+        productos = {}
+        if product_ids:
+            prods = self.odoo.search_read(
+                'product.product',
+                [('id', 'in', product_ids)],
+                ['id', 'name'],
+                limit=5000
+            )
+            productos = {p['id']: p['name'] for p in prods}
+        
+        # Filtrar solo las que tienen FLETE
+        lines_by_oc = {}
+        ocs_con_flete = set()
+        
+        for line in all_lines:
+            oc_id = line['order_id'][0] if line.get('order_id') else None
+            if not oc_id:
+                continue
+            
+            if oc_id not in lines_by_oc:
+                lines_by_oc[oc_id] = []
+            
+            if line.get('product_id'):
+                prod_id = line['product_id'][0]
+                prod_name = productos.get(prod_id, line['product_id'][1])
+                line['product_name'] = prod_name
+                
+                if 'FLETE' in prod_name.upper():
+                    ocs_con_flete.add(oc_id)
+            
+            lines_by_oc[oc_id].append(line)
+        
+        # Filtrar OCs con FLETE
+        ocs_flete = []
+        for oc in ocs:
+            if oc['id'] in ocs_con_flete:
+                oc['lines'] = lines_by_oc.get(oc['id'], [])
+                ocs_flete.append(oc)
+        
+        # Obtener facturas si se solicita
+        facturas_map = {}
+        if incluir_facturas:
+            invoice_ids = []
+            for oc in ocs_flete:
+                invoice_ids.extend(oc.get('invoice_ids', []))
+            
+            if invoice_ids:
+                facturas = self.odoo.search_read(
+                    'account.move',
+                    [('id', 'in', invoice_ids)],
+                    ['id', 'name', 'state', 'amount_untaxed', 'amount_tax', 
+                     'amount_total', 'invoice_date', 'payment_state'],
+                    limit=2000
+                )
+                facturas_map = {f['id']: f for f in facturas}
+        
+        # Calcular resúmenes
+        total_neto = 0
+        total_iva = 0
+        total_bruto = 0
+        por_proveedor = {}
+        por_mes = {}
+        por_estado = {}
+        
+        for oc in ocs_flete:
+            neto = oc.get('amount_untaxed', 0) or 0
+            iva = oc.get('amount_tax', 0) or 0
+            bruto = oc.get('amount_total', 0) or 0
+            
+            total_neto += neto
+            total_iva += iva
+            total_bruto += bruto
+            
+            # Por proveedor
+            proveedor = oc.get('partner_id', [None, 'Sin proveedor'])
+            prov_name = proveedor[1] if proveedor else 'Sin proveedor'
+            if prov_name not in por_proveedor:
+                por_proveedor[prov_name] = {'neto': 0, 'iva': 0, 'total': 0, 'count': 0}
+            por_proveedor[prov_name]['neto'] += neto
+            por_proveedor[prov_name]['iva'] += iva
+            por_proveedor[prov_name]['total'] += bruto
+            por_proveedor[prov_name]['count'] += 1
+            
+            # Por mes
+            fecha = oc.get('date_order', '')[:7] if oc.get('date_order') else 'Sin fecha'
+            if fecha not in por_mes:
+                por_mes[fecha] = {'neto': 0, 'iva': 0, 'total': 0, 'count': 0}
+            por_mes[fecha]['neto'] += neto
+            por_mes[fecha]['iva'] += iva
+            por_mes[fecha]['total'] += bruto
+            por_mes[fecha]['count'] += 1
+            
+            # Por estado
+            estado = oc.get('state', 'unknown')
+            if estado not in por_estado:
+                por_estado[estado] = {'neto': 0, 'iva': 0, 'total': 0, 'count': 0}
+            por_estado[estado]['neto'] += neto
+            por_estado[estado]['iva'] += iva
+            por_estado[estado]['total'] += bruto
+            por_estado[estado]['count'] += 1
+            
+            # Agregar facturas a la OC
+            if incluir_facturas and oc.get('invoice_ids'):
+                oc['facturas'] = [
+                    facturas_map.get(inv_id) 
+                    for inv_id in oc['invoice_ids'] 
+                    if inv_id in facturas_map
+                ]
+        
+        return {
+            'periodo': {'desde': fecha_desde, 'hasta': fecha_hasta},
+            'resumen': {
+                'total_ocs': len(ocs_flete),
+                'monto_neto': round(total_neto, 2),
+                'monto_iva': round(total_iva, 2),
+                'monto_total': round(total_bruto, 2),
+                'tasa_iva_promedio': round((total_iva / total_neto * 100), 2) if total_neto > 0 else 0,
+            },
+            'por_estado': por_estado,
+            'por_proveedor': dict(sorted(por_proveedor.items(), key=lambda x: x[1]['total'], reverse=True)),
+            'por_mes': dict(sorted(por_mes.items())),
+            'ocs': ocs_flete,
+            'facturas_count': len(facturas_map)
+        }
     
     def get_rutas_logistica(self, con_oc: bool = True, usar_backup: bool = False) -> List[Dict[str, Any]]:
         """

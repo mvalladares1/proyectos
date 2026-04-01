@@ -184,3 +184,40 @@ async def get_maestro_costos(
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get('/analisis-fletes')
+async def get_analisis_fletes(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
+    fecha_desde: Optional[str] = Query(None, description="Fecha inicio YYYY-MM-DD"),
+    fecha_hasta: Optional[str] = Query(None, description="Fecha fin YYYY-MM-DD"),
+    solo_aprobadas: bool = Query(False, description="Solo OCs aprobadas"),
+    incluir_facturas: bool = Query(True, description="Incluir info de facturas"),
+):
+    """
+    Análisis financiero de OCs de fletes.
+    
+    Retorna:
+    - Resumen con totales netos (sin IVA), IVA y totales
+    - Desglose por proveedor
+    - Desglose por mes
+    - Desglose por estado
+    - Detalle de cada OC con sus facturas asociadas
+    """
+    try:
+        service = AprobacionesFletesService(username=username, password=password)
+        resultado = service.get_ocs_fletes_para_analisis(
+            fecha_desde=fecha_desde,
+            fecha_hasta=fecha_hasta,
+            solo_aprobadas=solo_aprobadas,
+            incluir_facturas=incluir_facturas
+        )
+        
+        return {
+            'success': True,
+            **resultado
+        }
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

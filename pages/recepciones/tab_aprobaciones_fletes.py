@@ -7,7 +7,7 @@ Integrado con sistema de logística para comparación de presupuestos
 import streamlit as st
 import pandas as pd
 import xmlrpc.client
-from datetime import datetime
+from datetime import datetime, timedelta
 import time
 import requests
 import json
@@ -18,6 +18,7 @@ URL = 'https://riofuturo.server98c6e.oerpondemand.net'
 DB = 'riofuturo-master'
 API_LOGISTICA_COSTES = 'https://riofuturoprocesos.com/api/logistica/db/coste-rutas'
 API_BACKEND_RUTAS = 'https://riofuturoprocesos.com/api/v1/aprobaciones-fletes/rutas-por-ocs'
+API_BACKEND_ANALISIS = 'https://riofuturoprocesos.com/api/v1/aprobaciones-fletes/analisis-fletes'
 API_MINDICADOR = 'https://mindicador.cl/api'
 
 # Umbral de costo por kg en USD
@@ -932,7 +933,26 @@ def rechazar_oc(models, uid, username, password, oc_id, motivo, activity_id=None
 def render_tab(username, password):
     """Renderiza el tab de aprobaciones de fletes"""
     
-    st.header("🚚 Aprobaciones de Fletes y Transportes")
+    # Inicializar estado de vista (principal o analisis)
+    if 'vista_aprobaciones_fletes' not in st.session_state:
+        st.session_state.vista_aprobaciones_fletes = 'principal'
+    
+    # Si estamos en vista de análisis, renderizar esa vista
+    if st.session_state.vista_aprobaciones_fletes == 'analisis':
+        render_vista_analisis(username, password)
+        return
+    
+    # ========== VISTA PRINCIPAL ==========
+    
+    # Header con botón de análisis
+    col_header, col_analisis = st.columns([4, 1])
+    with col_header:
+        st.header("🚚 Aprobaciones de Fletes y Transportes")
+    with col_analisis:
+        if st.button("📊 Análisis", key="btn_ir_analisis", help="Ver análisis financiero"):
+            st.session_state.vista_aprobaciones_fletes = 'analisis'
+            st.rerun()
+    
     st.info("📦 Área: **TRANSPORTES** | Categoría: **SERVICIOS** | Requiere 2 aprobaciones")
     
     # Inicializar estado de sesión
@@ -1956,3 +1976,326 @@ def render_vista_expanders(df: pd.DataFrame, models, uid, username, password):
                         st.success("✅ OC completamente aprobada")
                     else:
                         st.info("ℹ️ Esta OC ya no requiere más aprobaciones")
+
+
+# =============================================================================
+# VISTA DE ANÁLISIS FINANCIERO
+# =============================================================================
+
+def cargar_datos_analisis(username: str, password: str, fecha_desde: str, fecha_hasta: str) -> Dict:
+    """Carga datos de análisis desde el backend"""
+    try:
+        params = {
+            'username': username,
+            'password': password,
+            'fecha_desde': fecha_desde,
+            'fecha_hasta': fecha_hasta,
+            'solo_aprobadas': False,
+            'incluir_facturas': True
+        }
+        response = requests.get(API_BACKEND_ANALISIS, params=params, timeout=120)
+        
+        if response.status_code == 200:
+            return response.json()
+        else:
+            return {'error': f"Error del servidor: {response.status_code}"}
+    except requests.exceptions.Timeout:
+        return {'error': "Timeout al cargar datos (120s)"}
+    except Exception as e:
+        return {'error': str(e)}
+
+
+def render_vista_analisis(username: str, password: str):
+    """Renderiza la vista de análisis financiero de fletes"""
+    
+    # Header con botón de volver
+    col_titulo, col_volver = st.columns([4, 1])
+    with col_titulo:
+        st.header("📊 Análisis Financiero de Fletes")
+    with col_volver:
+        if st.button("← Volver", key="btn_volver_analisis", type="secondary"):
+            st.session_state.vista_aprobaciones_fletes = 'principal'
+            st.rerun()
+    
+    st.info("📈 Análisis de OCs de fletes: montos netos, IVA, facturas y estados de pago")
+    
+    # Inicializar datos en session_state si no existen
+    if 'datos_analisis_fletes' not in st.session_state:
+        st.session_state.datos_analisis_fletes = None
+    if 'analisis_fecha_desde' not in st.session_state:
+        st.session_state.analisis_fecha_desde = (datetime.now() - timedelta(days=90)).strftime('%Y-%m-%d')
+    if 'analisis_fecha_hasta' not in st.session_state:
+        st.session_state.analisis_fecha_hasta = datetime.now().strftime('%Y-%m-%d')
+    
+    # Controles de carga
+    st.markdown("### 📅 Período de análisis")
+    col1, col2, col3 = st.columns([2, 2, 1])
+    
+    with col1:
+        fecha_desde = st.date_input(
+            "Desde",
+            value=datetime.strptime(st.session_state.analisis_fecha_desde, '%Y-%m-%d'),
+            key="analisis_fecha_desde_input"
+        )
+    
+    with col2:
+        fecha_hasta = st.date_input(
+            "Hasta",
+            value=datetime.strptime(st.session_state.analisis_fecha_hasta, '%Y-%m-%d'),
+            key="analisis_fecha_hasta_input"
+        )
+    
+    with col3:
+        st.write("")  # Espaciador
+        st.write("")
+        cargar = st.button("🔄 Cargar Datos", key="btn_cargar_analisis", type="primary")
+    
+    # Cargar datos si se presiona el botón
+    if cargar:
+        st.session_state.analisis_fecha_desde = fecha_desde.strftime('%Y-%m-%d')
+        st.session_state.analisis_fecha_hasta = fecha_hasta.strftime('%Y-%m-%d')
+        
+        with st.spinner("Cargando datos de Odoo... (esto puede tomar unos segundos)"):
+            datos = cargar_datos_analisis(
+                username, password,
+                st.session_state.analisis_fecha_desde,
+                st.session_state.analisis_fecha_hasta
+            )
+            
+            if 'error' in datos:
+                st.error(f"❌ {datos['error']}")
+                return
+            
+            st.session_state.datos_analisis_fletes = datos
+    
+    # Si no hay datos, mostrar mensaje
+    if not st.session_state.datos_analisis_fletes:
+        st.info("👆 Selecciona un rango de fechas y presiona 'Cargar Datos'")
+        return
+    
+    datos = st.session_state.datos_analisis_fletes
+    
+    # Verificar que la respuesta sea exitosa
+    if not datos.get('success'):
+        st.error("❌ Error al obtener datos")
+        return
+    
+    resumen = datos.get('resumen', {})
+    ocs = datos.get('ocs', [])
+    
+    if not ocs:
+        st.warning("No hay OCs de fletes en el período seleccionado")
+        return
+    
+    # Crear DataFrame
+    df = pd.DataFrame(ocs)
+    
+    # Convertir fechas
+    if 'date_order' in df.columns:
+        df['fecha'] = pd.to_datetime(df['date_order']).dt.date
+        df['semana'] = pd.to_datetime(df['date_order']).dt.to_period('W').astype(str)
+        df['mes'] = pd.to_datetime(df['date_order']).dt.to_period('M').astype(str)
+    
+    # Extraer nombre de proveedor
+    if 'partner_id' in df.columns:
+        df['proveedor'] = df['partner_id'].apply(
+            lambda x: x[1] if isinstance(x, (list, tuple)) and len(x) > 1 else 'Sin proveedor'
+        )
+    
+    # Marcar estado de facturación
+    df['facturado'] = df['invoice_ids'].apply(lambda x: len(x) > 0 if isinstance(x, list) else False)
+    
+    # FILTROS
+    st.markdown("---")
+    st.markdown("### 🔍 Filtros")
+    
+    col_f1, col_f2, col_f3 = st.columns(3)
+    
+    with col_f1:
+        proveedores = ['Todos'] + sorted(df['proveedor'].unique().tolist())
+        filtro_proveedor = st.selectbox("Proveedor", proveedores, key="analisis_filtro_proveedor")
+    
+    with col_f2:
+        estados = ['Todos'] + sorted(df['state'].unique().tolist())
+        filtro_estado = st.selectbox("Estado OC", estados, key="analisis_filtro_estado")
+    
+    with col_f3:
+        filtro_factura = st.selectbox(
+            "Facturación",
+            ['Todas', 'Facturadas', 'Sin facturar'],
+            key="analisis_filtro_factura"
+        )
+    
+    # Aplicar filtros
+    df_filtrado = df.copy()
+    
+    if filtro_proveedor != 'Todos':
+        df_filtrado = df_filtrado[df_filtrado['proveedor'] == filtro_proveedor]
+    
+    if filtro_estado != 'Todos':
+        df_filtrado = df_filtrado[df_filtrado['state'] == filtro_estado]
+    
+    if filtro_factura == 'Facturadas':
+        df_filtrado = df_filtrado[df_filtrado['facturado'] == True]
+    elif filtro_factura == 'Sin facturar':
+        df_filtrado = df_filtrado[df_filtrado['facturado'] == False]
+    
+    # MÉTRICAS PRINCIPALES
+    st.markdown("---")
+    st.markdown("### 💰 Resumen Financiero")
+    
+    total_neto = df_filtrado['amount_untaxed'].sum() if 'amount_untaxed' in df_filtrado.columns else 0
+    total_iva = df_filtrado['amount_tax'].sum() if 'amount_tax' in df_filtrado.columns else 0
+    total_bruto = df_filtrado['amount_total'].sum() if 'amount_total' in df_filtrado.columns else 0
+    
+    col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+    
+    with col_m1:
+        st.metric("Total Neto (sin IVA)", f"${total_neto:,.0f}")
+    
+    with col_m2:
+        st.metric("IVA (19%)", f"${total_iva:,.0f}")
+    
+    with col_m3:
+        st.metric("Total Bruto", f"${total_bruto:,.0f}")
+    
+    with col_m4:
+        st.metric("Cantidad OCs", len(df_filtrado))
+    
+    # Estado de OCs y facturas
+    st.markdown("### 📋 Estado de OCs")
+    
+    col_e1, col_e2, col_e3, col_e4 = st.columns(4)
+    
+    confirmadas = len(df_filtrado[df_filtrado['state'] == 'purchase'])
+    borrador = len(df_filtrado[df_filtrado['state'].isin(['draft', 'sent', 'to approve'])])
+    facturadas = len(df_filtrado[df_filtrado['facturado'] == True])
+    sin_facturar = len(df_filtrado[df_filtrado['facturado'] == False])
+    
+    with col_e1:
+        st.metric("✅ Confirmadas", confirmadas)
+    
+    with col_e2:
+        st.metric("📝 En proceso", borrador)
+    
+    with col_e3:
+        st.metric("📄 Facturadas", facturadas)
+    
+    with col_e4:
+        st.metric("⏳ Sin facturar", sin_facturar)
+    
+    # GRÁFICOS
+    st.markdown("---")
+    st.markdown("### 📈 Gráficos")
+    
+    tab_graf1, tab_graf2, tab_graf3 = st.tabs(["📅 Por Semana", "🏢 Por Proveedor", "📊 Estados"])
+    
+    with tab_graf1:
+        if 'semana' in df_filtrado.columns:
+            df_semana = df_filtrado.groupby('semana').agg({
+                'amount_untaxed': 'sum',
+                'amount_total': 'sum',
+                'name': 'count'
+            }).reset_index()
+            df_semana.columns = ['Semana', 'Neto', 'Total', 'Cantidad']
+            
+            st.bar_chart(df_semana.set_index('Semana')[['Neto', 'Total']])
+            
+            with st.expander("Ver datos por semana"):
+                df_semana_fmt = df_semana.copy()
+                df_semana_fmt['Neto'] = df_semana_fmt['Neto'].apply(lambda x: f"${x:,.0f}")
+                df_semana_fmt['Total'] = df_semana_fmt['Total'].apply(lambda x: f"${x:,.0f}")
+                st.dataframe(df_semana_fmt, use_container_width=True)
+    
+    with tab_graf2:
+        df_proveedor = df_filtrado.groupby('proveedor').agg({
+            'amount_untaxed': 'sum',
+            'amount_total': 'sum',
+            'name': 'count'
+        }).reset_index()
+        df_proveedor.columns = ['Proveedor', 'Neto', 'Total', 'Cantidad']
+        df_proveedor = df_proveedor.sort_values('Total', ascending=False).head(15)
+        
+        st.bar_chart(df_proveedor.set_index('Proveedor')['Total'])
+        
+        with st.expander("Ver datos por proveedor"):
+            df_prov_fmt = df_proveedor.copy()
+            df_prov_fmt['Neto'] = df_prov_fmt['Neto'].apply(lambda x: f"${x:,.0f}")
+            df_prov_fmt['Total'] = df_prov_fmt['Total'].apply(lambda x: f"${x:,.0f}")
+            st.dataframe(df_prov_fmt, use_container_width=True)
+    
+    with tab_graf3:
+        # Gráfico de estados
+        df_estado = df_filtrado.groupby('state').agg({
+            'amount_total': 'sum',
+            'name': 'count'
+        }).reset_index()
+        df_estado.columns = ['Estado', 'Monto', 'Cantidad']
+        
+        # Traducir estados
+        estado_map = {
+            'draft': 'Borrador',
+            'sent': 'Enviado',
+            'to approve': 'Por aprobar',
+            'purchase': 'Confirmada',
+            'done': 'Completada',
+            'cancel': 'Cancelada'
+        }
+        df_estado['Estado'] = df_estado['Estado'].map(estado_map).fillna(df_estado['Estado'])
+        
+        col_g1, col_g2 = st.columns(2)
+        
+        with col_g1:
+            st.markdown("**Por cantidad**")
+            st.bar_chart(df_estado.set_index('Estado')['Cantidad'])
+        
+        with col_g2:
+            st.markdown("**Por monto**")
+            st.bar_chart(df_estado.set_index('Estado')['Monto'])
+    
+    # TABLA DE DETALLE
+    st.markdown("---")
+    st.markdown("### 📋 Detalle de OCs")
+    
+    # Preparar tabla
+    cols_mostrar = ['name', 'proveedor', 'fecha', 'amount_untaxed', 'amount_tax', 'amount_total', 'state', 'facturado']
+    cols_disponibles = [c for c in cols_mostrar if c in df_filtrado.columns]
+    
+    df_tabla = df_filtrado[cols_disponibles].copy()
+    
+    # Renombrar columnas
+    rename_map = {
+        'name': 'OC',
+        'proveedor': 'Proveedor',
+        'fecha': 'Fecha',
+        'amount_untaxed': 'Neto',
+        'amount_tax': 'IVA',
+        'amount_total': 'Total',
+        'state': 'Estado',
+        'facturado': 'Facturada'
+    }
+    df_tabla = df_tabla.rename(columns={k: v for k, v in rename_map.items() if k in df_tabla.columns})
+    
+    # Formatear montos
+    for col in ['Neto', 'IVA', 'Total']:
+        if col in df_tabla.columns:
+            df_tabla[col] = df_tabla[col].apply(lambda x: f"${x:,.0f}" if pd.notna(x) else "$0")
+    
+    # Formato estado
+    if 'Estado' in df_tabla.columns:
+        df_tabla['Estado'] = df_tabla['Estado'].map(estado_map).fillna(df_tabla['Estado'])
+    
+    # Formato facturada
+    if 'Facturada' in df_tabla.columns:
+        df_tabla['Facturada'] = df_tabla['Facturada'].apply(lambda x: '✅' if x else '❌')
+    
+    st.dataframe(df_tabla, use_container_width=True, height=400)
+    
+    # Botón para descargar
+    csv = df_filtrado.to_csv(index=False)
+    st.download_button(
+        label="📥 Descargar CSV",
+        data=csv,
+        file_name=f"analisis_fletes_{st.session_state.analisis_fecha_desde}_{st.session_state.analisis_fecha_hasta}.csv",
+        mime="text/csv"
+    )
