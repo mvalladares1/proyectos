@@ -1131,6 +1131,12 @@ def render_tab(username, password):
                 (df['monto'] > 0)
             ].copy()
             
+            # DEBUG: Ver qué valores hay
+            st.caption(f"DEBUG: {len(df_con_kg)} OCs con kg | TC: {tipo_cambio_usd}")
+            if len(df_con_kg) > 0:
+                sample = df_con_kg[['oc_name', 'monto', 'total_qnt_ruta']].head(3)
+                st.caption(f"Muestra: {sample.to_dict('records')}")
+            
             if len(df_con_kg) > 0 and tipo_cambio_usd and tipo_cambio_usd > 0:
                 # Calcular costo real por kg: monto_usd / kg_reales
                 df_con_kg['costo_kg_real_usd'] = (df_con_kg['monto'] / tipo_cambio_usd) / df_con_kg['total_qnt_ruta']
