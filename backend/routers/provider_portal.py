@@ -158,3 +158,46 @@ async def provider_attachment(
         raise HTTPException(status_code=403, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.get("/qc-photo/{qc_id}/{field_name}")
+async def provider_qc_photo(
+    qc_id: int,
+    field_name: str,
+    authorization: Optional[str] = Header(None),
+    token: Optional[str] = Query(None),
+):
+    _, session = _get_session(authorization, token)
+    try:
+        service = ProviderPortalDataService(provider_session=session)
+        content, meta = service.get_quality_check_binary(int(session["partner_id"]), qc_id, field_name)
+        return StreamingResponse(
+            iter([content]),
+            media_type=meta["mimetype"],
+            headers={"Content-Disposition": f"inline; filename={meta['name']}"},
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.get("/documents/{move_id}/pdf")
+async def provider_document_pdf(
+    move_id: int,
+    authorization: Optional[str] = Header(None),
+    token: Optional[str] = Query(None),
+):
+    _, session = _get_session(authorization, token)
+    try:
+        service = ProviderPortalDataService(provider_session=session)
+        content, meta = service.get_document_pdf(int(session["partner_id"]), move_id)
+        return StreamingResponse(
+            iter([content]),
+            media_type=meta["mimetype"],
+            headers={"Content-Disposition": f"inline; filename={meta['name']}"},
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))

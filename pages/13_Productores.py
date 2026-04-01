@@ -1,7 +1,7 @@
 """Módulo PRODUCTORES dentro del dashboard principal."""
 import os
 from datetime import date, timedelta
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 import httpx
 import pandas as pd
@@ -27,6 +27,38 @@ st.set_page_config(
 
 if not proteger_modulo("productores"):
     st.stop()
+
+
+st.markdown(
+    """
+    <style>
+    .prod-hero {
+        padding: 0.9rem 1.1rem;
+        border: 1px solid rgba(120, 130, 160, 0.25);
+        border-radius: 12px;
+        background: linear-gradient(135deg, rgba(28, 31, 46, 0.8), rgba(18, 26, 38, 0.9));
+        margin-bottom: 0.8rem;
+    }
+    .prod-hero h3 {
+        margin: 0;
+        font-size: 1.25rem;
+        letter-spacing: 0.2px;
+    }
+    .prod-hero p {
+        margin: 0.35rem 0 0 0;
+        opacity: 0.9;
+    }
+    .prod-panel {
+        border: 1px solid rgba(90, 160, 130, 0.35);
+        border-radius: 10px;
+        background: linear-gradient(180deg, rgba(14, 43, 40, 0.55), rgba(11, 24, 36, 0.45));
+        padding: 0.6rem 0.8rem;
+        margin-bottom: 0.6rem;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 
 def _provider_headers() -> Dict[str, str]:
@@ -98,6 +130,32 @@ def _provider_download(attachment_id: int) -> tuple[bytes, str, str]:
     return response.content, filename.strip('"'), response.headers.get("Content-Type", "application/octet-stream")
 
 
+def _provider_download_qc_photo(qc_id: int, field_name: str) -> tuple[bytes, str, str]:
+    token = st.session_state.get("prod_provider_token")
+    response = httpx.get(
+        f"{API_URL}/api/v1/provider-portal/qc-photo/{qc_id}/{field_name}",
+        params={"token": token},
+        timeout=120.0,
+    )
+    response.raise_for_status()
+    disposition = response.headers.get("Content-Disposition", "")
+    filename = disposition.split("filename=", 1)[1] if "filename=" in disposition else f"qc_{qc_id}_{field_name}.jpg"
+    return response.content, filename.strip('"'), response.headers.get("Content-Type", "image/jpeg")
+
+
+def _provider_download_document_pdf(move_id: int) -> tuple[bytes, str, str]:
+    token = st.session_state.get("prod_provider_token")
+    response = httpx.get(
+        f"{API_URL}/api/v1/provider-portal/documents/{move_id}/pdf",
+        params={"token": token},
+        timeout=120.0,
+    )
+    response.raise_for_status()
+    disposition = response.headers.get("Content-Disposition", "")
+    filename = disposition.split("filename=", 1)[1] if "filename=" in disposition else f"documento_{move_id}.pdf"
+    return response.content, filename.strip('"'), response.headers.get("Content-Type", "application/pdf")
+
+
 def _provider_logout() -> None:
     token = st.session_state.get("prod_provider_token")
     if token:
@@ -132,9 +190,9 @@ def _render_summary(summary: Dict[str, Any]) -> None:
     cols = st.columns(6)
     cards = [
         ("Recepciones", f"{summary.get('recepciones', 0):,}"),
-        ("KG Recepcionados", f"{summary.get('kg_recepcionados', 0):,.0f}"),
+        ("KG Netos", f"{summary.get('kg_recepcionados', 0):,.0f}"),
         ("Guías", f"{summary.get('guias', 0):,}"),
-        ("Fotos", f"{summary.get('fotos', 0):,}"),
+        ("Fotos QC", f"{summary.get('fotos', 0):,}"),
         ("Proformas", f"{summary.get('proformas', 0):,}"),
         ("Facturas", f"{summary.get('facturas', 0):,}"),
     ]
@@ -143,7 +201,7 @@ def _render_summary(summary: Dict[str, Any]) -> None:
             st.metric(label, value)
 
 
-def _render_recepciones_table(recepciones):
+def _render_recepciones_table(recepciones: List[Dict[str, Any]]) -> None:
     rows = []
     for item in recepciones:
         rows.append(
@@ -162,7 +220,37 @@ def _render_recepciones_table(recepciones):
                 "Docs": item.get("cantidad_documentos", 0),
             }
         )
-    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+    df = pd.DataFrame(rows)
+    if not df.empty:
+        df = df.sort_values(by=["Fecha", "Albarán"], ascending=[False, False])
+    st.dataframe(df, use_container_width=True, hide_index=True)
+
+
+def _filter_recepciones(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    if not rows:
+        return []
+    c1, c2 = st.columns([2, 1])
+    with c1:
+        q = st.text_input("Buscar por guía, albarán u OC", value="", key="prod_busqueda_recepcion")
+    with c2:
+        estado = st.selectbox("Estado QC", ["Todos", "pass", "fail", "none"], key="prod_estado_qc")
+
+    q_norm = q.strip().upper()
+    result = []
+    for item in rows:
+        haystack = " ".join(
+            [
+                str(item.get("guia_despacho", "")),
+                str(item.get("albaran", "")),
+                str(item.get("oc_asociada", "")),
+            ]
+        ).upper()
+        if q_norm and q_norm not in haystack:
+            continue
+        if estado != "Todos" and str(item.get("quality_state", "")) != estado:
+            continue
+        result.append(item)
+    return result
 
 
 def _render_documentos(fin_docs):
@@ -190,6 +278,22 @@ def _render_documentos(fin_docs):
         for doc in docs:
             attachments = doc.get("attachments", [])
             links = doc.get("linked_recepciones", [])
+            pdf_col, info_col = st.columns([1, 3])
+            with pdf_col:
+                try:
+                    pdf_content, pdf_name, pdf_mime = _provider_download_document_pdf(int(doc["id"]))
+                    st.download_button(
+                        label="Descargar PDF",
+                        data=pdf_content,
+                        file_name=pdf_name,
+                        mime=pdf_mime,
+                        key=f"prod_pdf_move_{doc['id']}",
+                        use_container_width=True,
+                    )
+                except Exception:
+                    st.caption("PDF no disponible")
+            with info_col:
+                st.caption(f"Documento: {doc.get('name','')} | Referencia: {doc.get('ref','')}")
             if links:
                 with st.expander(f"Recepciones vinculadas {doc.get('name', '')} ({len(links)})"):
                     st.dataframe(pd.DataFrame(links), use_container_width=True, hide_index=True)
@@ -210,8 +314,25 @@ def _render_documentos(fin_docs):
                         st.warning(f"No se pudo descargar {attachment.get('name', 'adjunto')}: {exc}")
 
 
-st.markdown("## 🌱 PRODUCTORES")
-st.caption("Portal integrado para consulta de recepciones, calidad, fotos, proformas y facturas por proveedor")
+st.markdown(
+        """
+        <div class='prod-hero'>
+            <h3>🌱 PRODUCTORES</h3>
+            <p>Vista integrada por proveedor: recepciones, control de calidad, fotos y documentos comerciales vinculados.</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+)
+st.markdown(
+        """
+        <div class='prod-panel'>
+            <strong>Resumen del flujo</strong><br/>
+            1) Selecciona proveedor y rango de fechas. 2) Revisa recepciones y QC por albarán.
+            3) En Documentos descarga PDF y valida vínculo con guías/OC.
+        </div>
+        """,
+        unsafe_allow_html=True,
+)
 
 if "prod_provider_token" not in st.session_state:
     if ENV == "development":
@@ -287,8 +408,11 @@ if st.sidebar.button("Cerrar sesión proveedor", use_container_width=True):
     _provider_logout()
 
 today = date.today()
-start = st.date_input("Desde", value=today - timedelta(days=30), key="prod_fecha_inicio")
-end = st.date_input("Hasta", value=today, key="prod_fecha_fin")
+c_from, c_to = st.columns(2)
+with c_from:
+    start = st.date_input("Desde", value=today - timedelta(days=30), key="prod_fecha_inicio")
+with c_to:
+    end = st.date_input("Hasta", value=today, key="prod_fecha_fin")
 if start > end:
     st.error("La fecha inicio no puede ser mayor que la fecha fin")
     st.stop()
@@ -308,8 +432,10 @@ tab1, tab2, tab3 = st.tabs(["Recepciones", "Calidad/Fotos", "Proformas y Factura
 
 with tab1:
     recepciones = dashboard.get("recepciones", [])
-    if recepciones:
-        _render_recepciones_table(recepciones)
+    recepciones_filtradas = _filter_recepciones(recepciones)
+    st.caption(f"{len(recepciones_filtradas)} recepciones en pantalla")
+    if recepciones_filtradas:
+        _render_recepciones_table(recepciones_filtradas)
     else:
         st.info("Sin recepciones para el período seleccionado")
 
@@ -330,7 +456,9 @@ with tab2:
         c3.metric("Block %", f"{item.get('total_block', 0):.1f}")
         c4.metric("Gramos Muestra", f"{item.get('gramos_muestra', 0):,.0f}")
 
-        defectos = pd.DataFrame(
+        c_left, c_right = st.columns([1.2, 1])
+        with c_left:
+            defectos = pd.DataFrame(
             [
                 ("Daño Mecánico", item.get("dano_mecanico", 0)),
                 ("Hongos", item.get("hongos", 0)),
@@ -344,28 +472,32 @@ with tab2:
             ],
             columns=["Defecto", "Valor"],
         )
-        st.dataframe(defectos, use_container_width=True, hide_index=True)
+            st.dataframe(defectos, use_container_width=True, hide_index=True)
 
-        lineas = item.get("lineas_analisis", [])
-        st.markdown("#### Control de Calidad (líneas)")
-        if lineas:
-            st.dataframe(pd.DataFrame(lineas), use_container_width=True, hide_index=True)
-        else:
-            st.caption("Sin líneas detalladas de control de calidad")
+            lineas = item.get("lineas_analisis", [])
+            st.markdown("#### Control de Calidad (líneas)")
+            if lineas:
+                st.dataframe(pd.DataFrame(lineas), use_container_width=True, hide_index=True)
+            else:
+                st.caption("Sin líneas detalladas de control de calidad")
 
-        fotos = item.get("fotos", [])
-        st.markdown("#### Fotos")
-        if not fotos:
-            st.caption("Sin fotos para esta recepción")
-        else:
-            cols = st.columns(3)
-            for idx, foto in enumerate(fotos[:12]):
-                with cols[idx % 3]:
-                    try:
-                        content, filename, _ = _provider_download(foto["id"])
-                        st.image(content, caption=filename, use_container_width=True)
-                    except Exception as exc:
-                        st.warning(f"No se pudo cargar foto: {exc}")
+        with c_right:
+            fotos = item.get("fotos", [])
+            st.markdown("#### Fotos")
+            if not fotos:
+                st.caption("Sin fotos para esta recepción")
+            else:
+                cols = st.columns(2)
+                for idx, foto in enumerate(fotos[:12]):
+                    with cols[idx % 2]:
+                        try:
+                            if foto.get("source") == "quality_check_binary":
+                                content, filename, _ = _provider_download_qc_photo(int(foto["qc_id"]), str(foto["field"]))
+                            else:
+                                content, filename, _ = _provider_download(foto["id"])
+                            st.image(content, caption=filename, use_container_width=True)
+                        except Exception as exc:
+                            st.warning(f"No se pudo cargar foto: {exc}")
 
 with tab3:
     _render_documentos(dashboard)

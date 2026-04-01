@@ -69,6 +69,20 @@ def _date_bounds(fecha_inicio: str, fecha_fin: str) -> Tuple[str, str, date, dat
     )
 
 
+def _date_chunks(start_date: date, end_date: date, days: int = 21) -> List[Tuple[str, str]]:
+    chunks: List[Tuple[str, str]] = []
+    cur = start_date
+    while cur <= end_date:
+        chunk_end = min(cur + timedelta(days=days - 1), end_date)
+        chunks.append((f"{cur.isoformat()} 00:00:00", f"{chunk_end.isoformat()} 23:59:59"))
+        cur = chunk_end + timedelta(days=1)
+    return chunks
+
+
+def _chunk_list(values: List[int], size: int = 200) -> List[List[int]]:
+    return [values[i : i + size] for i in range(0, len(values), size)]
+
+
 def _password_hash(password: str, salt: str) -> str:
     derived = hashlib.pbkdf2_hmac(
         "sha256",
@@ -411,6 +425,13 @@ class ProviderPortalAuthService:
 class ProviderPortalDataService:
     """Datos visibles por un proveedor autenticado."""
 
+    QC_BINARY_FIELDS = [
+        "x_studio_foto_1_samh",
+        "x_studio_foto_2_samh",
+        "x_studio_foto_3_samh",
+        "x_studio_foto_4_samh",
+    ]
+
     def __init__(self, provider_session: Optional[Dict[str, Any]] = None) -> None:
         self.demo_mode = False
         try:
@@ -466,14 +487,55 @@ class ProviderPortalDataService:
         if self.demo_mode:
             return []
         fecha_inicio_dt, fecha_fin_dt, start_date, end_date = _date_bounds(fecha_inicio, fecha_fin)
-        recepciones = get_recepciones_mp(
-            self.odoo_username,
-            self.odoo_password,
-            fecha_inicio_dt,
-            fecha_fin_dt,
-            productor_id=partner_id,
-            solo_hechas=True,
-        )
+        try:
+            recepciones = get_recepciones_mp(
+                self.odoo_username,
+                self.odoo_password,
+                fecha_inicio_dt,
+                fecha_fin_dt,
+                productor_id=partner_id,
+                solo_hechas=True,
+            )
+        except Exception as exc:
+            # En rangos largos algunos proveedores generan respuestas XML-RPC grandes.
+            # Fallback: consultar por tramos y unificar por id.
+            if "IncompleteRead" not in str(exc):
+                raise
+            recepciones = []
+            seen_ids = set()
+            for chunk_start, chunk_end in _date_chunks(start_date, end_date, days=14):
+                try:
+                    partial = get_recepciones_mp(
+                        self.odoo_username,
+                        self.odoo_password,
+                        chunk_start,
+                        chunk_end,
+                        productor_id=partner_id,
+                        solo_hechas=True,
+                    )
+                except Exception as sub_exc:
+                    if "IncompleteRead" not in str(sub_exc):
+                        raise
+                    # Último fallback: consulta diaria para minimizar payload.
+                    partial = []
+                    day_start = date.fromisoformat(chunk_start[:10])
+                    day_end = date.fromisoformat(chunk_end[:10])
+                    for daily_start, daily_end in _date_chunks(day_start, day_end, days=1):
+                        daily = get_recepciones_mp(
+                            self.odoo_username,
+                            self.odoo_password,
+                            daily_start,
+                            daily_end,
+                            productor_id=partner_id,
+                            solo_hechas=True,
+                        )
+                        partial.extend(daily or [])
+                for item in partial or []:
+                    rec_id = item.get("id")
+                    if rec_id in seen_ids:
+                        continue
+                    seen_ids.add(rec_id)
+                    recepciones.append(item)
         if not recepciones:
             return []
 
@@ -494,10 +556,9 @@ class ProviderPortalDataService:
             return []
 
         picking_ids = [item["id"] for item in recepciones if item.get("id")]
-        quality_checks = self.odoo.search_read(
-            "quality.check",
-            [("picking_id", "in", picking_ids)],
-            [
+        quality_checks: List[Dict[str, Any]] = []
+        if picking_ids:
+            qc_fields = [
                 "id",
                 "name",
                 "picking_id",
@@ -508,10 +569,19 @@ class ProviderPortalDataService:
                 "x_studio_mp",
                 "x_studio_one2many_field_mZmK2",
                 "x_studio_one2many_field_rgA7I",
-            ],
-            limit=10000,
-        ) if picking_ids else []
+                *self.QC_BINARY_FIELDS,
+            ]
+            for ids_chunk in _chunk_list([int(x) for x in picking_ids], size=250):
+                quality_checks.extend(
+                    self.odoo.search_read(
+                        "quality.check",
+                        [("picking_id", "in", ids_chunk)],
+                        qc_fields,
+                        limit=10000,
+                    )
+                )
         qc_by_picking: Dict[int, List[Dict[str, Any]]] = {}
+        qc_binary_photos_by_picking: Dict[int, List[Dict[str, Any]]] = {}
         qc_ids: List[int] = []
         line_to_picking: Dict[Tuple[str, int], int] = {}
         for qc in quality_checks:
@@ -529,6 +599,18 @@ class ProviderPortalDataService:
                 }
             )
             qc_ids.append(qc.get("id"))
+
+            for field_name in self.QC_BINARY_FIELDS:
+                if qc.get(field_name):
+                    qc_binary_photos_by_picking.setdefault(int(picking_id), []).append(
+                        {
+                            "source": "quality_check_binary",
+                            "qc_id": int(qc.get("id")),
+                            "field": field_name,
+                            "name": field_name,
+                            "mimetype": "image/jpeg",
+                        }
+                    )
 
             for line_id in qc.get("x_studio_frutilla", []) or []:
                 line_to_picking[("x_quality_check_line_89a53", int(line_id))] = int(picking_id)
@@ -551,7 +633,7 @@ class ProviderPortalDataService:
         resultado = []
         for item in recepciones:
             rec_id = item.get("id")
-            fotos = photos_by_recepcion.get(rec_id, [])
+            fotos = photos_by_recepcion.get(rec_id, []) + qc_binary_photos_by_picking.get(rec_id, [])
             documentos = attachments_by_recepcion.get(rec_id, [])
             resultado.append(
                 {
@@ -666,8 +748,20 @@ class ProviderPortalDataService:
 
     def get_dashboard(self, partner_id: int, fecha_inicio: str, fecha_fin: str) -> Dict[str, Any]:
         partner = self.get_partner_profile(partner_id)
-        recepciones = self.get_recepciones(partner_id, fecha_inicio, fecha_fin)
-        financial = self.get_financial_documents(partner_id, fecha_inicio, fecha_fin, recepciones=recepciones)
+        try:
+            recepciones = self.get_recepciones(partner_id, fecha_inicio, fecha_fin)
+        except Exception as exc:
+            if "IncompleteRead" in str(exc):
+                recepciones = []
+            else:
+                raise ValueError(f"recepciones_error: {exc}") from exc
+        try:
+            financial = self.get_financial_documents(partner_id, fecha_inicio, fecha_fin, recepciones=recepciones)
+        except Exception as exc:
+            if "IncompleteRead" in str(exc):
+                financial = {"proformas": [], "facturas": []}
+            else:
+                raise ValueError(f"documentos_error: {exc}") from exc
         total_kg = sum(item.get("kg_recepcionados", 0) or 0 for item in recepciones)
         total_fotos = sum(item.get("cantidad_fotos", 0) for item in recepciones)
         total_guias = len({item.get("guia_despacho") for item in recepciones if item.get("guia_despacho")})
@@ -717,39 +811,42 @@ class ProviderPortalDataService:
             return []
         attachments: List[Dict[str, Any]] = []
         if picking_ids:
-            attachments.extend(
-                self.odoo.search_read(
-                    "ir.attachment",
-                    [("res_model", "=", "stock.picking"), ("res_id", "in", picking_ids)],
-                    ["id", "name", "mimetype", "res_model", "res_id", "create_date"],
-                    limit=10000,
-                    order="create_date desc",
+            for ids_chunk in _chunk_list([int(x) for x in picking_ids], size=300):
+                attachments.extend(
+                    self.odoo.search_read(
+                        "ir.attachment",
+                        [("res_model", "=", "stock.picking"), ("res_id", "in", ids_chunk)],
+                        ["id", "name", "mimetype", "res_model", "res_id", "create_date"],
+                        limit=10000,
+                        order="create_date desc",
+                    )
                 )
-            )
         if qc_ids:
-            attachments.extend(
-                self.odoo.search_read(
-                    "ir.attachment",
-                    [("res_model", "=", "quality.check"), ("res_id", "in", qc_ids)],
-                    ["id", "name", "mimetype", "res_model", "res_id", "create_date"],
-                    limit=10000,
-                    order="create_date desc",
+            for ids_chunk in _chunk_list([int(x) for x in qc_ids], size=300):
+                attachments.extend(
+                    self.odoo.search_read(
+                        "ir.attachment",
+                        [("res_model", "=", "quality.check"), ("res_id", "in", ids_chunk)],
+                        ["id", "name", "mimetype", "res_model", "res_id", "create_date"],
+                        limit=10000,
+                        order="create_date desc",
+                    )
                 )
-            )
         line_to_picking = line_to_picking or {}
         for model_name in ["x_quality_check_line_89a53", "x_quality_check_line_19657", "x_quality_check_line_1d183"]:
             model_ids = [res_id for (model, res_id), _ in line_to_picking.items() if model == model_name]
             if not model_ids:
                 continue
-            attachments.extend(
-                self.odoo.search_read(
-                    "ir.attachment",
-                    [("res_model", "=", model_name), ("res_id", "in", model_ids)],
-                    ["id", "name", "mimetype", "res_model", "res_id", "create_date"],
-                    limit=10000,
-                    order="create_date desc",
+            for ids_chunk in _chunk_list([int(x) for x in model_ids], size=300):
+                attachments.extend(
+                    self.odoo.search_read(
+                        "ir.attachment",
+                        [("res_model", "=", model_name), ("res_id", "in", ids_chunk)],
+                        ["id", "name", "mimetype", "res_model", "res_id", "create_date"],
+                        limit=10000,
+                        order="create_date desc",
+                    )
                 )
-            )
 
         qc_to_picking = {}
         if qc_ids:
@@ -805,6 +902,85 @@ class ProviderPortalDataService:
                 }
             )
         return result
+
+    def get_quality_check_binary(
+        self,
+        partner_id: int,
+        qc_id: int,
+        field_name: str,
+    ) -> Tuple[bytes, Dict[str, Any]]:
+        if field_name not in self.QC_BINARY_FIELDS:
+            raise ValueError("Campo de foto no permitido")
+        checks = self.odoo.read(
+            "quality.check",
+            [qc_id],
+            ["id", "picking_id", field_name],
+        )
+        if not checks:
+            raise ValueError("Control de calidad no encontrado")
+        qc = checks[0]
+        picking = qc.get("picking_id")
+        picking_id = picking[0] if isinstance(picking, (list, tuple)) and picking else None
+        if not picking_id:
+            raise ValueError("Control de calidad sin recepción")
+
+        pickings = self.odoo.read("stock.picking", [picking_id], ["partner_id", "name"])
+        picking_partner = pickings[0].get("partner_id") if pickings else None
+        access_partner_id = picking_partner[0] if isinstance(picking_partner, (list, tuple)) and picking_partner else None
+        if access_partner_id != partner_id:
+            raise ValueError("Sin acceso a la foto")
+
+        payload = qc.get(field_name)
+        if not payload:
+            raise ValueError("Foto no disponible")
+
+        raw = base64.b64decode(payload.encode("utf-8"))
+        picking_name = (pickings[0].get("name") if pickings else "recepcion") or "recepcion"
+        return raw, {
+            "name": f"{picking_name}_{field_name}.jpg",
+            "mimetype": "image/jpeg",
+        }
+
+    def get_document_pdf(self, partner_id: int, move_id: int) -> Tuple[bytes, Dict[str, Any]]:
+        moves = self.odoo.read(
+            "account.move",
+            [move_id],
+            ["id", "name", "partner_id", "sii_file_pdf"],
+        )
+        if not moves:
+            raise ValueError("Documento no encontrado")
+        move = moves[0]
+        partner = move.get("partner_id")
+        move_partner_id = partner[0] if isinstance(partner, (list, tuple)) and partner else None
+        if move_partner_id != partner_id:
+            raise ValueError("Sin acceso al documento")
+
+        sii_pdf = move.get("sii_file_pdf")
+        if sii_pdf:
+            return base64.b64decode(sii_pdf.encode("utf-8")), {
+                "name": f"{move.get('name') or 'documento'}.pdf",
+                "mimetype": "application/pdf",
+            }
+
+        pdf_attachments = self.odoo.search_read(
+            "ir.attachment",
+            [
+                ("res_model", "=", "account.move"),
+                ("res_id", "=", move_id),
+                ("mimetype", "=", "application/pdf"),
+            ],
+            ["id", "name", "datas", "mimetype"],
+            limit=1,
+            order="create_date desc",
+        )
+        if pdf_attachments and pdf_attachments[0].get("datas"):
+            att = pdf_attachments[0]
+            return base64.b64decode(att["datas"].encode("utf-8")), {
+                "name": att.get("name") or f"{move.get('name') or 'documento'}.pdf",
+                "mimetype": att.get("mimetype") or "application/pdf",
+            }
+
+        raise ValueError("Documento sin PDF disponible")
 
     def _assert_attachment_access(self, partner_id: int, attachment: Dict[str, Any]) -> None:
         res_model = attachment.get("res_model")
