@@ -751,11 +751,17 @@ class ProviderPortalDataService:
         try:
             recepciones = self.get_recepciones(partner_id, fecha_inicio, fecha_fin)
         except Exception as exc:
-            raise ValueError(f"recepciones_error: {exc}") from exc
+            if "IncompleteRead" in str(exc):
+                recepciones = []
+            else:
+                raise ValueError(f"recepciones_error: {exc}") from exc
         try:
             financial = self.get_financial_documents(partner_id, fecha_inicio, fecha_fin, recepciones=recepciones)
         except Exception as exc:
-            raise ValueError(f"documentos_error: {exc}") from exc
+            if "IncompleteRead" in str(exc):
+                financial = {"proformas": [], "facturas": []}
+            else:
+                raise ValueError(f"documentos_error: {exc}") from exc
         total_kg = sum(item.get("kg_recepcionados", 0) or 0 for item in recepciones)
         total_fotos = sum(item.get("cantidad_fotos", 0) for item in recepciones)
         total_guias = len({item.get("guia_despacho") for item in recepciones if item.get("guia_despacho")})
