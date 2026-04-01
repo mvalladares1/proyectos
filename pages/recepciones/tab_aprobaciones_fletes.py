@@ -1120,22 +1120,16 @@ def render_tab(username, password):
     
     with col6:
         # Promedio de costo por kg en USD
-        # IMPORTANTE: NO usar cost_per_kg_usd de la ruta (viene mal calculado si OC tiene qty=1)
-        # Recalcular usando: monto (CLP) / tipo_cambio / total_qnt_ruta (kg reales de logística)
+        # Recalcular: monto (CLP) / tipo_cambio / total_qnt_ruta (kg reales de logística)
+        # IGNORAR: OCs con total_qnt_ruta = 1 (datos no cargados en logística)
         if 'monto' in df.columns and 'total_qnt_ruta' in df.columns:
-            # Filtrar: OCs con kg reales desde logística > 0
+            # Filtrar: OCs con kg reales > 1 (ignorar las que tienen qty=1)
             df_con_kg = df[
                 (df['total_qnt_ruta'].notna()) &
-                (df['total_qnt_ruta'] > 0) &
+                (df['total_qnt_ruta'] > 1) &  # Ignorar las con 1
                 (df['monto'].notna()) &
                 (df['monto'] > 0)
             ].copy()
-            
-            # DEBUG: Ver qué valores hay
-            st.caption(f"DEBUG: {len(df_con_kg)} OCs con kg | TC: {tipo_cambio_usd}")
-            if len(df_con_kg) > 0:
-                sample = df_con_kg[['oc_name', 'monto', 'total_qnt_ruta']].head(3)
-                st.caption(f"Muestra: {sample.to_dict('records')}")
             
             if len(df_con_kg) > 0 and tipo_cambio_usd and tipo_cambio_usd > 0:
                 # Calcular costo real por kg: monto_usd / kg_reales
@@ -1146,7 +1140,7 @@ def render_tab(username, password):
                     "Prom. $/Kg USD", 
                     f"${prom_costo_kg_usd:.3f}",
                     delta=f"{delta_vs_umbral:+.1f}% vs $0.11",
-                    delta_color="inverse"  # Verde si es negativo (mejor), rojo si es positivo (peor)
+                    delta_color="inverse"
                 )
             else:
                 st.metric("Prom. $/Kg USD", "⚠️ Sin rutas con kg")
