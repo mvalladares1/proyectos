@@ -17,7 +17,8 @@ from backend.routers import (
     estado_resultado, presupuesto, permissions, recepcion,
     rendimiento, compras, automatizaciones, comercial,
     flujo_caja, reconciliacion, odf_reconciliation,
-    aprobaciones_fletes, etiquetas, proformas, cartera
+    aprobaciones_fletes, etiquetas, proformas, cartera,
+    provider_portal
 )
 
 logger = logging.getLogger(__name__)
@@ -88,6 +89,7 @@ app.include_router(aprobaciones_fletes.router)
 app.include_router(etiquetas.router)
 app.include_router(proformas.router)
 app.include_router(cartera.router)
+app.include_router(provider_portal.router)
 
 @app.get("/")
 async def root():

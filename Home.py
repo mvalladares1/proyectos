@@ -97,6 +97,7 @@ if is_user_authenticated() and username:
             ("stock", st.Page("pages/4_Stock.py", title="Stock", icon="📦")),
             ("pedidos_venta", st.Page("pages/5_Pedidos_Venta.py", title="Pedidos de Venta", icon="🚢")),
             ("rendimiento", st.Page("pages/7_Rendimiento.py", title="Trazabilidad", icon="🔍")),
+            ("productores", st.Page("pages/13_Productores.py", title="Productores", icon="🌱")),
             ("relacion_comercial", st.Page("pages/11_Relacion_Comercial.py", title="Relación Comercial", icon="🤝")),
             ("automatizaciones", st.Page("pages/10_Automatizaciones.py", title="Automatizaciones", icon="🦾")),
         ],

@@ -24,7 +24,14 @@ def render(username: str, password: str):
     st.caption("Configura quién puede ver cada módulo y página del sistema")
     
     # Tabs principales
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📁 Módulos", "📄 Páginas", "👤 Usuarios", "📦 Override Origen", "⚙️ Configuración"])
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        "📁 Módulos",
+        "📄 Páginas",
+        "👤 Usuarios",
+        "📦 Override Origen",
+        "⚙️ Configuración",
+        "🏪 Portal Proveedores",
+    ])
     
     with tab1:
         _fragment_modulos(username, password)
@@ -36,6 +43,8 @@ def render(username: str, password: str):
         _fragment_override_origen(username, password)
     with tab5:
         _fragment_config(username, password)
+    with tab6:
+        _fragment_provider_portal(username, password)
 
 
 @st.fragment
@@ -638,6 +647,8 @@ def _fragment_config(username: str, password: str):
                             st.error("Error al agregar override")
                     except Exception as e:
                         st.error(f"Error: {e}")
+
+
         else:
             st.caption("No hay exclusiones disponibles para convertir en override")
         
@@ -672,3 +683,110 @@ def _fragment_config(username: str, password: str):
                             st.error("Error al agregar override")
                     except Exception as e:
                         st.error(f"Error: {e}")
+
+
+@st.fragment
+def _fragment_provider_portal(username: str, password: str):
+    """Fragment para administración del portal de proveedores."""
+    st.subheader("Portal de Proveedores")
+    st.caption("Sincroniza proveedores MP y configura accesos del portal sin usar scripts locales")
+
+    col_sync, col_info = st.columns([1, 2])
+    with col_sync:
+        if st.button("🔄 Sincronizar proveedores MP", use_container_width=True, key="pp_sync"):
+            try:
+                resp = httpx.post(
+                    f"{API_URL}/api/v1/permissions/provider-portal/sync",
+                    params={"admin_username": username, "admin_password": password},
+                    timeout=120.0,
+                )
+                if resp.status_code == 200:
+                    result = resp.json()
+                    st.success(
+                        f"Sincronización completada: {result.get('created', 0)} creados, "
+                        f"{result.get('updated', 0)} actualizados, {result.get('total', 0)} total"
+                    )
+                else:
+                    st.error(resp.text)
+            except Exception as e:
+                st.error(f"Error sincronizando: {e}")
+    with col_info:
+        st.info("La sincronización toma los proveedores con recepciones MP hechas y los deja disponibles para activar en el portal.")
+
+    with st.form("provider_portal_set_password"):
+        st.markdown("### Activar o resetear clave")
+        c1, c2, c3 = st.columns([1.2, 1, 0.8])
+        with c1:
+            rut = st.text_input("RUT proveedor", placeholder="12.345.678-9")
+        with c2:
+            portal_password = st.text_input("Nueva clave", type="password")
+        with c3:
+            activate = st.checkbox("Activar usuario", value=True)
+        submitted = st.form_submit_button("Guardar clave", use_container_width=True, type="primary")
+        if submitted:
+            try:
+                resp = httpx.post(
+                    f"{API_URL}/api/v1/permissions/provider-portal/set-password",
+                    json={
+                        "rut": rut,
+                        "password": portal_password,
+                        "activate": activate,
+                        "admin_username": username,
+                        "admin_password": password,
+                    },
+                    timeout=30.0,
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    st.success(f"Clave actualizada para {data.get('display_name', rut)}")
+                else:
+                    st.error(resp.text)
+            except Exception as e:
+                st.error(f"Error guardando clave: {e}")
+
+    st.markdown("### Usuarios portal")
+    filtro = st.text_input("Buscar por nombre, RUT o email", key="provider_portal_filter")
+    try:
+        resp = httpx.get(
+            f"{API_URL}/api/v1/permissions/provider-portal/users",
+            params={"admin_username": username, "admin_password": password},
+            timeout=60.0,
+        )
+        if resp.status_code == 200:
+            users = resp.json().get("users", [])
+        else:
+            users = []
+            st.error(resp.text)
+    except Exception as e:
+        users = []
+        st.error(f"Error cargando usuarios del portal: {e}")
+
+    if filtro:
+        filtro_lower = filtro.strip().lower()
+        users = [
+            user for user in users
+            if filtro_lower in (user.get("display_name", "").lower())
+            or filtro_lower in (user.get("rut", "").lower())
+            or filtro_lower in (user.get("email", "").lower())
+        ]
+
+    if users:
+        st.dataframe(
+            users,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "partner_id": st.column_config.NumberColumn("Partner ID"),
+                "display_name": st.column_config.TextColumn("Proveedor", width="large"),
+                "rut": st.column_config.TextColumn("RUT"),
+                "email": st.column_config.TextColumn("Email", width="medium"),
+                "phone": st.column_config.TextColumn("Teléfono"),
+                "city": st.column_config.TextColumn("Ciudad"),
+                "active": st.column_config.CheckboxColumn("Activo"),
+                "has_password": st.column_config.CheckboxColumn("Clave"),
+                "created_at": st.column_config.TextColumn("Creado"),
+                "updated_at": st.column_config.TextColumn("Actualizado"),
+            },
+        )
+    else:
+        st.info("No hay usuarios portal para mostrar.")

@@ -206,6 +206,7 @@ else:
         ("📦", "Stock", "Inventario en cámaras y pallets", "pages/4_Stock.py", "stock"),
         ("🚢", "Pedidos de Venta", "Pedidos y avance de producción", "pages/5_Pedidos_Venta.py", "pedidos_venta"),
         ("🔍", "Trazabilidad", "Trazabilidad inversa PT → MP y generación de diagramas", "pages/7_Rendimiento.py", "rendimiento"),
+        ("🌱", "Productores", "Portal de proveedores con recepciones, calidad, fotos y documentos", "pages/13_Productores.py", "productores"),
         ("🤝", "Relación Comercial", "Análisis comercial y relaciones con clientes", "pages/11_Relacion_Comercial.py", "relacion_comercial"),
         ("🦾", "Automatizaciones", "Túneles Estáticos - Creación de MO", "pages/10_Automatizaciones.py", "automatizaciones"),
     ]

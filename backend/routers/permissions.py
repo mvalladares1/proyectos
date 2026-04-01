@@ -21,6 +21,7 @@ from backend.services.permissions_service import (
     remove_page,
     clear_page_restriction
 )
+from backend.services.provider_portal_service import ProviderPortalAuthService
 from shared.odoo_client import OdooClient
 
 router = APIRouter(prefix="/api/v1/permissions", tags=["Permissions"])
@@ -44,6 +45,14 @@ class PagePermissionRequest(BaseModel):
 class MaintenanceRequest(BaseModel):
     enabled: bool
     message: Optional[str] = None
+    admin_username: str
+    admin_password: str
+
+
+class ProviderPortalPasswordRequest(BaseModel):
+    rut: str
+    password: str
+    activate: bool = True
     admin_username: str
     admin_password: str
 
@@ -213,6 +222,67 @@ def remove_admin_endpoint(
     _validate_admin(admin_username, admin_password)
     admins = remove_admin(email)
     return {"admins": admins}
+
+
+# ============ PORTAL DE PROVEEDORES ============
+
+@router.get("/provider-portal/users")
+def get_provider_portal_users(
+    admin_username: str = Query(...),
+    admin_password: str = Query(...)
+) -> Dict:
+    """Lista usuarios del portal de proveedores."""
+    _validate_admin(admin_username, admin_password)
+    users = ProviderPortalAuthService.list_users()
+    sanitized = []
+    for user in users:
+        sanitized.append({
+            "partner_id": user.get("partner_id"),
+            "rut": user.get("rut", ""),
+            "display_name": user.get("display_name", ""),
+            "email": user.get("email", ""),
+            "phone": user.get("phone", ""),
+            "city": user.get("city", ""),
+            "active": bool(user.get("active", False)),
+            "has_password": bool(user.get("password_hash")),
+            "created_at": user.get("created_at", ""),
+            "updated_at": user.get("updated_at", ""),
+        })
+    return {"users": sanitized}
+
+
+@router.post("/provider-portal/sync")
+def sync_provider_portal_users(
+    admin_username: str = Query(...),
+    admin_password: str = Query(...)
+) -> Dict:
+    """Sincroniza usuarios del portal desde proveedores MP en Odoo."""
+    _validate_admin(admin_username, admin_password)
+    try:
+        result = ProviderPortalAuthService.sync_users_from_odoo()
+        return result
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.post("/provider-portal/set-password")
+def set_provider_portal_password(payload: ProviderPortalPasswordRequest) -> Dict:
+    """Configura o resetea la clave de un proveedor portal."""
+    _validate_admin(payload.admin_username, payload.admin_password)
+    try:
+        user = ProviderPortalAuthService.set_password(
+            rut=payload.rut,
+            password=payload.password,
+            activate=payload.activate,
+        )
+        return {
+            "partner_id": user.get("partner_id"),
+            "rut": user.get("rut", ""),
+            "display_name": user.get("display_name", ""),
+            "active": bool(user.get("active", False)),
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 # ============ OVERRIDE DE ORIGEN ============

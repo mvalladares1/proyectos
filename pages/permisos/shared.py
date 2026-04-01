@@ -23,6 +23,7 @@ MODULE_NAMES = {
     "stock": "📦 Stock",
     "pedidos_venta": "🚢 Pedidos de Venta",
     "rendimiento": "🔍 Trazabilidad",
+    "productores": "🌱 Productores",
     "relacion_comercial": "🤝 Relación Comercial",
     "automatizaciones": "🦾 Automatizaciones",
     "finanzas": "💰 Finanzas",

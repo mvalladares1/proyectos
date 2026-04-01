@@ -556,8 +556,9 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
         # Kg netos = kg recibidos - kg devueltos
         kg_total = kg_total_recepcion - kg_total_devuelto
         
-        # Si después de la devolución no queda nada, excluir la recepción
-        if kg_total <= 0:
+        # Excluir solo cuando hay devolución completa real de kilos.
+        # Si la recepción viene en otras UOM (ej. bandejas) puede tener 0 kg y seguir siendo válida.
+        if kg_total <= 0 and kg_total_recepcion > 0 and kg_total_devuelto >= kg_total_recepcion:
             print(f"[INFO] Excluyendo {albaran}: devolución completa (0 kg netos)")
             continue
         

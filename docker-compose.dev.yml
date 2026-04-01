@@ -12,6 +12,10 @@ services:
       - ENV=development
       - PYTHONPATH=/app
       - MPLCONFIGDIR=/tmp/matplotlib
+      - ODOO_USER=${ODOO_USER:-}
+      - ODOO_PASSWORD=${ODOO_PASSWORD:-}
+      - PROVIDER_PORTAL_SECRET_KEY=${PROVIDER_PORTAL_SECRET_KEY:-dev-secret-key-change-in-prod}
+      - SESSION_SECRET_KEY=${SESSION_SECRET_KEY:-}
     volumes:
       - ./data:/app/data
       - ./backend:/app/backend
@@ -57,6 +61,38 @@ services:
           memory: 512M
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8502/dashboards-dev/_stcore/health"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 30s
+
+  web-provider-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    container_name: rio-web-provider-dev
+    command: >
+      streamlit run Home_Proveedor.py
+      --server.port=8504
+      --server.address=0.0.0.0
+      --server.headless=true
+      --server.baseUrlPath=/proveedores-dev
+    environment:
+      - ENV=development
+      - API_URL=http://127.0.0.1:8002
+      - STREAMLIT_SERVER_PORT=8504
+      - STREAMLIT_SERVER_BASE_URL_PATH=/proveedores-dev
+    volumes:
+      - ./backend:/app/backend
+      - ./shared:/app/shared
+      - ./Home_Proveedor.py:/app/Home_Proveedor.py
+    network_mode: "host"
+    depends_on:
+      api-dev:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8504/proveedores-dev/_stcore/health"]
       interval: 30s
       timeout: 15s
       retries: 3
