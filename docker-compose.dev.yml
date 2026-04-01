@@ -12,6 +12,10 @@ services:
       - ENV=development
       - PYTHONPATH=/app
       - MPLCONFIGDIR=/tmp/matplotlib
+      - ODOO_USER=${ODOO_USER:-}
+      - ODOO_PASSWORD=${ODOO_PASSWORD:-}
+      - PROVIDER_PORTAL_SECRET_KEY=${PROVIDER_PORTAL_SECRET_KEY:-dev-secret-key-change-in-prod}
+      - SESSION_SECRET_KEY=${SESSION_SECRET_KEY:-}
     volumes:
       - ./data:/app/data
       - ./backend:/app/backend
