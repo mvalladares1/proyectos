@@ -43,7 +43,7 @@ def render(username: str, password: str):
             # Filtros dinámicos sobre el dataframe ya cargado
             st.markdown("---")
             st.markdown("#### 🔍 Filtros Adicionales")
-            f1, f2, f3 = st.columns(3)
+            f1, f2, f3, f4 = st.columns(4)
             with f1:
                 manejos_raw = df['manejo'].unique()
                 manejos_set = set()
@@ -63,6 +63,16 @@ def render(username: str, password: str):
                 sel_fruta = st.multiselect("Filtrar Tipo de Fruta", sorted(list(frutas_set)), default=[], placeholder="Todos")
             
             with f3:
+                variedades_raw = df['variedad'].unique() if 'variedad' in df.columns else []
+                variedades_set = set()
+                for v_str in variedades_raw:
+                    for part in str(v_str).split(", "):
+                        if part and part != "N/A":
+                            variedades_set.add(part)
+
+                sel_variedad = st.multiselect("Filtrar Variedad", sorted(list(variedades_set)), default=[], placeholder="Todos")
+
+            with f4:
                 productores = sorted(df['productor'].unique())
                 sel_prod = st.multiselect("Filtrar Productor", productores, default=[], placeholder="Todos")
 
@@ -72,6 +82,8 @@ def render(username: str, password: str):
                 df_filtered = df_filtered[df_filtered['manejo'].apply(lambda x: any(m in str(x) for m in sel_manejo))]
             if sel_fruta:
                 df_filtered = df_filtered[df_filtered['tipo_fruta'].apply(lambda x: any(f in str(x) for f in sel_fruta))]
+            if sel_variedad and 'variedad' in df_filtered.columns:
+                df_filtered = df_filtered[df_filtered['variedad'].apply(lambda x: any(v in str(x) for v in sel_variedad))]
             if sel_prod:
                 df_filtered = df_filtered[df_filtered['productor'].isin(sel_prod)]
 
@@ -111,7 +123,7 @@ def render(username: str, password: str):
                 
                 # Mostrar tabla de duplicados agrupados
                 st.dataframe(
-                    df_dup_agrupado[['guia_despacho', 'fecha', 'origen', 'albaran', 'productor', 'manejo', 'tipo_fruta', 'cantidad_pallets', 'total_kg', 'odoo_url']],
+                    df_dup_agrupado[['guia_despacho', 'fecha', 'origen', 'albaran', 'productor', 'manejo', 'tipo_fruta', 'variedad', 'cantidad_pallets', 'total_kg', 'odoo_url']],
                     use_container_width=True,
                     hide_index=True,
                     column_config={
@@ -122,6 +134,7 @@ def render(username: str, password: str):
                         "productor": st.column_config.TextColumn("Productor", width="large"),
                         "manejo": st.column_config.TextColumn("Manejo", width="medium"),
                         "tipo_fruta": st.column_config.TextColumn("Fruta", width="small"),
+                        "variedad": st.column_config.TextColumn("Variedad", width="medium"),
                         "cantidad_pallets": st.column_config.NumberColumn("Pallets", format="%d"),
                         "total_kg": st.column_config.NumberColumn("Total Kg", format="%.2f"),
                         "odoo_url": st.column_config.LinkColumn(
@@ -195,7 +208,7 @@ def render(username: str, password: str):
             df_view['guia_display'] = df_view.apply(format_guia_duplicada, axis=1)
             
             st.dataframe(
-                df_view[['fecha', 'origen', 'albaran', 'productor', 'guia_display', 'manejo', 'tipo_fruta', 'cantidad_pallets', 'total_kg', 'odoo_url']],
+                df_view[['fecha', 'origen', 'albaran', 'productor', 'guia_display', 'manejo', 'tipo_fruta', 'variedad', 'cantidad_pallets', 'total_kg', 'odoo_url']],
                 use_container_width=True,
                 hide_index=True,
                 column_config={
@@ -206,6 +219,7 @@ def render(username: str, password: str):
                     "guia_display": st.column_config.TextColumn("Guía Despacho", width="medium", help="⚠️ indica guías duplicadas"),
                     "manejo": st.column_config.TextColumn("Manejo", width="medium"),
                     "tipo_fruta": st.column_config.TextColumn("Fruta", width="small"),
+                    "variedad": st.column_config.TextColumn("Variedad", width="medium"),
                     "cantidad_pallets": st.column_config.NumberColumn("Pallets", format="%d"),
                     "total_kg": st.column_config.NumberColumn("Total Kg", format="%.2f"),
                     "odoo_url": st.column_config.LinkColumn(
@@ -238,7 +252,8 @@ def render(username: str, password: str):
                             fecha_fin.strftime("%Y-%m-%d"),
                             manejo=sel_manejo,
                             tipo_fruta=sel_fruta,
-                            origen=sel_origen
+                            origen=sel_origen,
+                            variedad=sel_variedad
                         )
                         if xlsx:
                             st.download_button(

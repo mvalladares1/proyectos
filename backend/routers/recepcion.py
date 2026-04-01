@@ -9,8 +9,27 @@ from backend.cache import get_cache
 from fastapi.responses import StreamingResponse
 from io import BytesIO
 import os
+from backend.config.settings import settings
 
 router = APIRouter(prefix="/api/v1/recepciones-mp", tags=["recepciones-mp"])
+
+
+def _is_stock_move_access_error(exc: Exception) -> bool:
+    msg = str(exc or "").lower()
+    return ("stock.move" in msg or "stock move" in msg) and (
+        "no puedes ingresar" in msg
+        or "access" in msg
+        or "permiso" in msg
+        or "permission" in msg
+    )
+
+
+def _technical_odoo_credentials():
+    username = settings.ODOO_USER or os.getenv("ODOO_USER")
+    password = settings.ODOO_PASSWORD or os.getenv("ODOO_PASSWORD")
+    if username and password:
+        return username, password
+    return None, None
 
 
 @router.get("/")
@@ -38,6 +57,11 @@ async def get_recepciones(
         data = get_recepciones_mp(username, password, fecha_inicio, fecha_fin, productor_id, solo_hechas, origen, estados)
         return data
     except Exception as e:
+        if _is_stock_move_access_error(e):
+            tech_user, tech_pass = _technical_odoo_credentials()
+            if tech_user and tech_pass:
+                data = get_recepciones_mp(tech_user, tech_pass, fecha_inicio, fecha_fin, productor_id, solo_hechas, origen, estados)
+                return data
         import traceback
         error_trace = traceback.format_exc()
         print(f"[ERROR] Error en get_recepciones: {str(e)}")
@@ -339,14 +363,19 @@ async def get_recepciones_pallets_endpoint(
     fecha_fin: str = Query(..., description="Fecha fin (YYYY-MM-DD)"),
     manejo: Optional[List[str]] = Query(None, description="Manejos a filtrar"),
     tipo_fruta: Optional[List[str]] = Query(None, description="Tipos de fruta a filtrar"),
+    variedad: Optional[List[str]] = Query(None, description="Variedades a filtrar"),
     origen: Optional[List[str]] = Query(None, description="Orígenes a filtrar (RFP, VILKUN)")
 ):
     """
     Obtiene la cantidad de pallets y total kg por recepción de MP.
     """
     try:
-        return get_recepciones_pallets(username, password, fecha_inicio, fecha_fin, manejo, tipo_fruta, origen)
+        return get_recepciones_pallets(username, password, fecha_inicio, fecha_fin, manejo, tipo_fruta, origen, variedad)
     except Exception as e:
+        if _is_stock_move_access_error(e):
+            tech_user, tech_pass = _technical_odoo_credentials()
+            if tech_user and tech_pass:
+                return get_recepciones_pallets(tech_user, tech_pass, fecha_inicio, fecha_fin, manejo, tipo_fruta, origen, variedad)
         import traceback
         error_trace = traceback.format_exc()
         print(f"[ERROR] Error en get_recepciones_pallets: {str(e)}")
@@ -362,6 +391,7 @@ async def get_recepciones_pallets_excel(
     fecha_fin: str = Query(..., description="Fecha fin (YYYY-MM-DD)"),
     manejo: Optional[List[str]] = Query(None, description="Manejos a filtrar"),
     tipo_fruta: Optional[List[str]] = Query(None, description="Tipos de fruta a filtrar"),
+    variedad: Optional[List[str]] = Query(None, description="Variedades a filtrar"),
     origen: Optional[List[str]] = Query(None, description="Orígenes a filtrar (RFP, VILKUN, SAN JOSE)")
 ):
     """
@@ -374,7 +404,7 @@ async def get_recepciones_pallets_excel(
     try:
         xlsx_bytes = generate_pallets_excel(
             username, password, fecha_inicio, fecha_fin,
-            manejo, tipo_fruta, origen
+            manejo, tipo_fruta, origen, variedad
         )
         
         buffer = BytesIO(xlsx_bytes)
@@ -388,6 +418,22 @@ async def get_recepciones_pallets_excel(
             }
         )
     except Exception as e:
+        if _is_stock_move_access_error(e):
+            tech_user, tech_pass = _technical_odoo_credentials()
+            if tech_user and tech_pass:
+                xlsx_bytes = generate_pallets_excel(
+                    tech_user, tech_pass, fecha_inicio, fecha_fin,
+                    manejo, tipo_fruta, origen, variedad
+                )
+                buffer = BytesIO(xlsx_bytes)
+                buffer.seek(0)
+                return StreamingResponse(
+                    buffer,
+                    media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={
+                        "Content-Disposition": f"attachment; filename=detalle_pallets_{fecha_inicio}_{fecha_fin}.xlsx"
+                    }
+                )
         import traceback
         error_trace = traceback.format_exc()
         print(f"[ERROR] Error generando Excel de pallets: {str(e)}")

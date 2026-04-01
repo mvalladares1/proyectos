@@ -60,6 +60,29 @@ def _normalize_categoria(cat: str) -> str:
     return c
 
 
+def _resolve_variedad_field(client: OdooClient) -> Optional[str]:
+    try:
+        fields = client.execute("product.template", "fields_get", [], {"attributes": ["type"]}) or {}
+        for candidate in ("x_studio_categora_variedad", "x_studio_variedad"):
+            if candidate in fields:
+                return candidate
+    except Exception as e:
+        print(f"[WARNING] No se pudo resolver campo de variedad: {e}")
+    return None
+
+
+def _extract_variedad_text(raw: Any, variedad_map: Dict[int, str]) -> str:
+    if not raw:
+        return ""
+    if isinstance(raw, (list, tuple)):
+        if len(raw) > 1 and isinstance(raw[0], int):
+            return str(raw[1] or "")
+        if all(isinstance(v, int) for v in raw):
+            names = [variedad_map.get(v, "") for v in raw if variedad_map.get(v)]
+            return ", ".join(names)
+    return str(raw)
+
+
 def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fin: str, productor_id: Optional[int] = None, solo_hechas: bool = True, origen: Optional[List[str]] = None, estados: Optional[List[str]] = None) -> List[Dict[str, Any]]:
     """
     Obtiene recepciones de materia prima con datos de calidad.
@@ -484,7 +507,7 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
             lineas_frambuesa_alt_map[l["id"]] = l
     
     # ============ PASO 7: Construir resultado final ============
-    resultado = []
+    resultado_map: Dict[Any, Dict[str, Any]] = {}
     
     for idx, rec in enumerate(recepciones):
         # VALIDACIÓN: Asegurar que rec es un diccionario
@@ -871,7 +894,8 @@ def validar_recepciones(username: str, password: str, picking_ids: List[int]) ->
 def get_recepciones_pallets(username: str, password: str, fecha_inicio: str, fecha_fin: str, 
                              manejo_filtros: Optional[List[str]] = None, 
                              tipo_fruta_filtros: Optional[List[str]] = None,
-                             origen_filtros: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+                             origen_filtros: Optional[List[str]] = None,
+                             variedad_filtros: Optional[List[str]] = None) -> List[Dict[str, Any]]:
     """
     Obtiene la cantidad de pallets y total kg por recepción de MP.
     """
@@ -966,12 +990,27 @@ def get_recepciones_pallets(username: str, password: str, fecha_inicio: str, fec
     if all_product_ids:
         products = client.read("product.product", all_product_ids, ["id", "product_tmpl_id"])
         template_ids = list(set(p["product_tmpl_id"][0] for p in products if p.get("product_tmpl_id")))
+        variedad_field = _resolve_variedad_field(client)
+        template_fields = ["id", "x_studio_categora_tipo_de_manejo", "x_studio_sub_categora"]
+        if variedad_field:
+            template_fields.append(variedad_field)
         
-        templates = client.read(
-            "product.template", 
-            template_ids, 
-            ["id", "x_studio_categora_tipo_de_manejo", "x_studio_sub_categora"]
-        )
+        templates = client.read("product.template", template_ids, template_fields)
+
+        variedad_ids = set()
+        if variedad_field:
+            for t in templates:
+                raw_variedad = t.get(variedad_field)
+                if isinstance(raw_variedad, list) and raw_variedad and all(isinstance(v, int) for v in raw_variedad):
+                    variedad_ids.update(raw_variedad)
+
+        variedad_map: Dict[int, str] = {}
+        if variedad_ids:
+            try:
+                for v in client.read("x_variedad", list(variedad_ids), ["id", "display_name"]):
+                    variedad_map[v["id"]] = v.get("display_name", "")
+            except Exception as e:
+                print(f"[WARNING] No se pudo leer x_variedad en get_recepciones_pallets: {e}")
         
         template_map = {}
         for t in templates:
@@ -985,12 +1024,13 @@ def get_recepciones_pallets(username: str, password: str, fecha_inicio: str, fec
                 
             template_map[t["id"]] = {
                 "manejo": manejo or "N/A",
-                "tipo_fruta": tipo_fruta or "N/A"
+                "tipo_fruta": tipo_fruta or "N/A",
+                "variedad": _extract_variedad_text(t.get(variedad_field), variedad_map) if variedad_field else "N/A"
             }
             
         for p in products:
             tmpl_id = p["product_tmpl_id"][0] if p.get("product_tmpl_id") else None
-            product_info[p["id"]] = template_map.get(tmpl_id, {"manejo": "N/A", "tipo_fruta": "N/A"})
+            product_info[p["id"]] = template_map.get(tmpl_id, {"manejo": "N/A", "tipo_fruta": "N/A", "variedad": "N/A"})
 
     # 4. Agrupar y filtrar
     ml_by_picking = {}
@@ -1024,16 +1064,19 @@ def get_recepciones_pallets(username: str, password: str, fecha_inicio: str, fec
         filtered_ml = []
         for ml in p_ml:
             p_id = ml["product_id"][0] if ml.get("product_id") else None
-            info = product_info.get(p_id, {"manejo": "N/A", "tipo_fruta": "N/A"})
+            info = product_info.get(p_id, {"manejo": "N/A", "tipo_fruta": "N/A", "variedad": "N/A"})
             
             # Filtros
             if manejo_filtros and info["manejo"] not in manejo_filtros:
                 continue
             if tipo_fruta_filtros and info["tipo_fruta"] not in tipo_fruta_filtros:
                 continue
+            if variedad_filtros and info["variedad"] not in variedad_filtros:
+                continue
                 
             ml["manejo"] = info["manejo"]
             ml["tipo_fruta"] = info["tipo_fruta"]
+            ml["variedad"] = info["variedad"]
             filtered_ml.append(ml)
             
         if not filtered_ml:
@@ -1050,6 +1093,7 @@ def get_recepciones_pallets(username: str, password: str, fecha_inicio: str, fec
         cantidad_pallets = len(packages)
         manejos_presentes = list(set(ml["manejo"] for ml in filtered_ml))
         frutas_presentes = list(set(ml["tipo_fruta"] for ml in filtered_ml))
+        variedades_presentes = list(set(ml.get("variedad", "") for ml in filtered_ml if ml.get("variedad")))
         
         guia = p.get("x_studio_gua_de_despacho") or ""
         
@@ -1063,6 +1107,7 @@ def get_recepciones_pallets(username: str, password: str, fecha_inicio: str, fec
             "total_kg": round(total_kg, 2),
             "manejo": ", ".join(manejos_presentes),
             "tipo_fruta": ", ".join(frutas_presentes),
+            "variedad": ", ".join(variedades_presentes),
             "origen": origen_val
         })
     
@@ -1100,7 +1145,8 @@ def get_recepciones_pallets(username: str, password: str, fecha_inicio: str, fec
 def get_recepciones_pallets_detailed(username: str, password: str, fecha_inicio: str, fecha_fin: str, 
                                       manejo_filtros: Optional[List[str]] = None, 
                                       tipo_fruta_filtros: Optional[List[str]] = None,
-                                      origen_filtros: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+                                      origen_filtros: Optional[List[str]] = None,
+                                      variedad_filtros: Optional[List[str]] = None) -> List[Dict[str, Any]]:
     """
     Retorna una lista donde cada elemento es UN PALLET (un package), con su info de recepción.
     Usado para generar el Excel detallado.
@@ -1197,12 +1243,27 @@ def get_recepciones_pallets_detailed(username: str, password: str, fecha_inicio:
     if all_product_ids:
         products = client.read("product.product", all_product_ids, ["id", "product_tmpl_id", "display_name"])
         template_ids = list(set(p["product_tmpl_id"][0] for p in products if p.get("product_tmpl_id")))
-        
-        templates = client.read(
-            "product.template", 
-            template_ids, 
-            ["id", "x_studio_categora_tipo_de_manejo", "x_studio_sub_categora"]
-        )
+        variedad_field = _resolve_variedad_field(client)
+        template_fields = ["id", "x_studio_categora_tipo_de_manejo", "x_studio_sub_categora"]
+        if variedad_field:
+            template_fields.append(variedad_field)
+
+        templates = client.read("product.template", template_ids, template_fields)
+
+        variedad_ids = set()
+        if variedad_field:
+            for t in templates:
+                raw_variedad = t.get(variedad_field)
+                if isinstance(raw_variedad, list) and raw_variedad and all(isinstance(v, int) for v in raw_variedad):
+                    variedad_ids.update(raw_variedad)
+
+        variedad_map: Dict[int, str] = {}
+        if variedad_ids:
+            try:
+                for v in client.read("x_variedad", list(variedad_ids), ["id", "display_name"]):
+                    variedad_map[v["id"]] = v.get("display_name", "")
+            except Exception as e:
+                print(f"[WARNING] No se pudo leer x_variedad en get_recepciones_pallets_detailed: {e}")
         
         template_map = {}
         for t in templates:
@@ -1215,12 +1276,13 @@ def get_recepciones_pallets_detailed(username: str, password: str, fecha_inicio:
             
             template_map[t["id"]] = {
                 "manejo": manejo or "N/A",
-                "tipo_fruta": tipo_fruta or "N/A"
+                "tipo_fruta": tipo_fruta or "N/A",
+                "variedad": _extract_variedad_text(t.get(variedad_field), variedad_map) if variedad_field else "N/A"
             }
             
         for p in products:
             tmpl_id = p["product_tmpl_id"][0] if p.get("product_tmpl_id") else None
-            info = template_map.get(tmpl_id, {"manejo": "N/A", "tipo_fruta": "N/A"})
+            info = template_map.get(tmpl_id, {"manejo": "N/A", "tipo_fruta": "N/A", "variedad": "N/A"})
             info["display_name"] = p.get("display_name", "")
             product_info[p["id"]] = info
 
@@ -1235,12 +1297,14 @@ def get_recepciones_pallets_detailed(username: str, password: str, fecha_inicio:
             continue
         
         p_id = ml["product_id"][0] if ml.get("product_id") else None
-        info = product_info.get(p_id, {"manejo": "N/A", "tipo_fruta": "N/A", "display_name": ""})
+        info = product_info.get(p_id, {"manejo": "N/A", "tipo_fruta": "N/A", "variedad": "N/A", "display_name": ""})
         
         # Filtros
         if manejo_filtros and info["manejo"] not in manejo_filtros:
             continue
         if tipo_fruta_filtros and info["tipo_fruta"] not in tipo_fruta_filtros:
+            continue
+        if variedad_filtros and info["variedad"] not in variedad_filtros:
             continue
             
         # Determinar planta
@@ -1262,17 +1326,28 @@ def get_recepciones_pallets_detailed(username: str, password: str, fecha_inicio:
         pkg = ml.get("result_package_id")
         pallet_name = pkg[1] if isinstance(pkg, (list, tuple)) else str(pkg) if pkg else "S/P"
 
-        resultado.append({
-            "fecha": str(p.get("date_done") or p.get("scheduled_date") or "")[:10],
-            "origen": origen_val,
-            "albaran": p["name"],
-            "productor": p["partner_id"][1] if p.get("partner_id") else "N/A",
-            "guia_despacho": p.get("x_studio_gua_de_despacho") or "",
-            "pallet_name": pallet_name,
-            "producto_name": info["display_name"],
-            "manejo": info["manejo"],
-            "tipo_fruta": info["tipo_fruta"],
-            "kg": round(ml.get("qty_done", 0) or 0, 2)
-        })
-        
-    return resultado
+        key = (
+            pk_id,
+            pallet_name,
+            info["display_name"],
+            info["manejo"],
+            info["tipo_fruta"],
+            info.get("variedad", ""),
+        )
+        if key not in resultado_map:
+            resultado_map[key] = {
+                "fecha": str(p.get("date_done") or p.get("scheduled_date") or "")[:10],
+                "origen": origen_val,
+                "albaran": p["name"],
+                "productor": p["partner_id"][1] if p.get("partner_id") else "N/A",
+                "guia_despacho": p.get("x_studio_gua_de_despacho") or "",
+                "pallet_name": pallet_name,
+                "producto_name": info["display_name"],
+                "manejo": info["manejo"],
+                "tipo_fruta": info["tipo_fruta"],
+                "variedad": info.get("variedad", ""),
+                "kg": 0.0,
+            }
+        resultado_map[key]["kg"] += round(ml.get("qty_done", 0) or 0, 2)
+
+    return list(resultado_map.values())

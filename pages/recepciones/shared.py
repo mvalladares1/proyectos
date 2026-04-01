@@ -145,7 +145,7 @@ def fetch_gestion_overview(_username, _password, fecha_inicio, fecha_fin):
 
 
 @st.cache_data(ttl=120, show_spinner=False)
-def fetch_pallets_data(_username, _password, fecha_inicio, fecha_fin, manejo=None, tipo_fruta=None, origen=None):
+def fetch_pallets_data(_username, _password, fecha_inicio, fecha_fin, manejo=None, tipo_fruta=None, origen=None, variedad=None):
     """Obtiene datos de pallets por recepción."""
     params = {
         "username": _username, "password": _password,
@@ -156,6 +156,8 @@ def fetch_pallets_data(_username, _password, fecha_inicio, fecha_fin, manejo=Non
         params["manejo"] = manejo
     if tipo_fruta:
         params["tipo_fruta"] = tipo_fruta
+    if variedad:
+        params["variedad"] = variedad
     if origen:
         params["origen"] = origen
     
@@ -168,7 +170,7 @@ def fetch_pallets_data(_username, _password, fecha_inicio, fecha_fin, manejo=Non
     return None
 
 
-def fetch_pallets_excel(username, password, fecha_inicio, fecha_fin, manejo=None, tipo_fruta=None, origen=None):
+def fetch_pallets_excel(username, password, fecha_inicio, fecha_fin, manejo=None, tipo_fruta=None, origen=None, variedad=None):
     """Obtiene el archivo Excel de detalle de pallets."""
     params = {
         "username": username, "password": password,
@@ -179,6 +181,8 @@ def fetch_pallets_excel(username, password, fecha_inicio, fecha_fin, manejo=None
         params["manejo"] = manejo
     if tipo_fruta:
         params["tipo_fruta"] = tipo_fruta
+    if variedad:
+        params["variedad"] = variedad
     if origen:
         params["origen"] = origen
     

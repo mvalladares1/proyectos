@@ -328,7 +328,8 @@ def generate_recepciones_excel(username: str, password: str, fecha_inicio: str, 
 def generate_pallets_excel(username: str, password: str, fecha_inicio: str, fecha_fin: str,
                             manejo_filtros: Optional[List[str]] = None,
                             tipo_fruta_filtros: Optional[List[str]] = None,
-                            origen_filtros: Optional[List[str]] = None) -> bytes:
+                            origen_filtros: Optional[List[str]] = None,
+                            variedad_filtros: Optional[List[str]] = None) -> bytes:
     """
     Genera un Excel con el detalle de cada pallet (uno por fila).
     
@@ -349,7 +350,7 @@ def generate_pallets_excel(username: str, password: str, fecha_inicio: str, fech
     # Obtener datos detallados (un pallet por fila)
     pallets_detail = get_recepciones_pallets_detailed(
         username, password, fecha_inicio, fecha_fin, 
-        manejo_filtros, tipo_fruta_filtros, origen_filtros
+        manejo_filtros, tipo_fruta_filtros, origen_filtros, variedad_filtros
     )
     
     wb = Workbook()
@@ -359,7 +360,7 @@ def generate_pallets_excel(username: str, password: str, fecha_inicio: str, fech
     # Encabezados
     headers = [
         "Fecha", "Planta/Origen", "Albarán", "Productor", "Guía Despacho", 
-        "Pallet ID", "Producto", "Manejo", "Tipo Fruta", "Kg"
+        "Pallet ID", "Producto", "Manejo", "Tipo Fruta", "Variedad", "Kg"
     ]
     ws.append(headers)
     
@@ -382,6 +383,7 @@ def generate_pallets_excel(username: str, password: str, fecha_inicio: str, fech
             p.get("producto_name", ""),
             p.get("manejo", ""),
             p.get("tipo_fruta", ""),
+            p.get("variedad", ""),
             p.get("kg", 0)
         ])
     
