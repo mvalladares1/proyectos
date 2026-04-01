@@ -411,6 +411,13 @@ class ProviderPortalAuthService:
 class ProviderPortalDataService:
     """Datos visibles por un proveedor autenticado."""
 
+    QC_BINARY_FIELDS = [
+        "x_studio_foto_1_samh",
+        "x_studio_foto_2_samh",
+        "x_studio_foto_3_samh",
+        "x_studio_foto_4_samh",
+    ]
+
     def __init__(self, provider_session: Optional[Dict[str, Any]] = None) -> None:
         self.demo_mode = False
         try:
@@ -508,10 +515,12 @@ class ProviderPortalDataService:
                 "x_studio_mp",
                 "x_studio_one2many_field_mZmK2",
                 "x_studio_one2many_field_rgA7I",
+                *self.QC_BINARY_FIELDS,
             ],
             limit=10000,
         ) if picking_ids else []
         qc_by_picking: Dict[int, List[Dict[str, Any]]] = {}
+        qc_binary_photos_by_picking: Dict[int, List[Dict[str, Any]]] = {}
         qc_ids: List[int] = []
         line_to_picking: Dict[Tuple[str, int], int] = {}
         for qc in quality_checks:
@@ -529,6 +538,18 @@ class ProviderPortalDataService:
                 }
             )
             qc_ids.append(qc.get("id"))
+
+            for field_name in self.QC_BINARY_FIELDS:
+                if qc.get(field_name):
+                    qc_binary_photos_by_picking.setdefault(int(picking_id), []).append(
+                        {
+                            "source": "quality_check_binary",
+                            "qc_id": int(qc.get("id")),
+                            "field": field_name,
+                            "name": field_name,
+                            "mimetype": "image/jpeg",
+                        }
+                    )
 
             for line_id in qc.get("x_studio_frutilla", []) or []:
                 line_to_picking[("x_quality_check_line_89a53", int(line_id))] = int(picking_id)
@@ -551,7 +572,7 @@ class ProviderPortalDataService:
         resultado = []
         for item in recepciones:
             rec_id = item.get("id")
-            fotos = photos_by_recepcion.get(rec_id, [])
+            fotos = photos_by_recepcion.get(rec_id, []) + qc_binary_photos_by_picking.get(rec_id, [])
             documentos = attachments_by_recepcion.get(rec_id, [])
             resultado.append(
                 {
@@ -789,6 +810,44 @@ class ProviderPortalDataService:
         attachments = self.odoo.search_read(
             "ir.attachment",
             [("res_model", "=", "account.move"), ("res_id", "in", invoice_ids)],
+
+        def get_quality_check_binary(
+            self,
+            partner_id: int,
+            qc_id: int,
+            field_name: str,
+        ) -> Tuple[bytes, Dict[str, Any]]:
+            if field_name not in self.QC_BINARY_FIELDS:
+                raise ValueError("Campo de foto no permitido")
+            checks = self.odoo.read(
+                "quality.check",
+                [qc_id],
+                ["id", "picking_id", field_name],
+            )
+            if not checks:
+                raise ValueError("Control de calidad no encontrado")
+            qc = checks[0]
+            picking = qc.get("picking_id")
+            picking_id = picking[0] if isinstance(picking, (list, tuple)) and picking else None
+            if not picking_id:
+                raise ValueError("Control de calidad sin recepción")
+
+            pickings = self.odoo.read("stock.picking", [picking_id], ["partner_id", "name"])
+            picking_partner = pickings[0].get("partner_id") if pickings else None
+            access_partner_id = picking_partner[0] if isinstance(picking_partner, (list, tuple)) and picking_partner else None
+            if access_partner_id != partner_id:
+                raise ValueError("Sin acceso a la foto")
+
+            payload = qc.get(field_name)
+            if not payload:
+                raise ValueError("Foto no disponible")
+
+            raw = base64.b64decode(payload.encode("utf-8"))
+            picking_name = (pickings[0].get("name") if pickings else "recepcion") or "recepcion"
+            return raw, {
+                "name": f"{picking_name}_{field_name}.jpg",
+                "mimetype": "image/jpeg",
+            }
             ["id", "name", "mimetype", "res_id", "create_date"],
             limit=10000,
             order="create_date desc",

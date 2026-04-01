@@ -98,6 +98,19 @@ def _provider_download(attachment_id: int) -> tuple[bytes, str, str]:
     return response.content, filename.strip('"'), response.headers.get("Content-Type", "application/octet-stream")
 
 
+def _provider_download_qc_photo(qc_id: int, field_name: str) -> tuple[bytes, str, str]:
+    token = st.session_state.get("prod_provider_token")
+    response = httpx.get(
+        f"{API_URL}/api/v1/provider-portal/qc-photo/{qc_id}/{field_name}",
+        params={"token": token},
+        timeout=120.0,
+    )
+    response.raise_for_status()
+    disposition = response.headers.get("Content-Disposition", "")
+    filename = disposition.split("filename=", 1)[1] if "filename=" in disposition else f"qc_{qc_id}_{field_name}.jpg"
+    return response.content, filename.strip('"'), response.headers.get("Content-Type", "image/jpeg")
+
+
 def _provider_logout() -> None:
     token = st.session_state.get("prod_provider_token")
     if token:
@@ -362,7 +375,10 @@ with tab2:
             for idx, foto in enumerate(fotos[:12]):
                 with cols[idx % 3]:
                     try:
-                        content, filename, _ = _provider_download(foto["id"])
+                        if foto.get("source") == "quality_check_binary":
+                            content, filename, _ = _provider_download_qc_photo(int(foto["qc_id"]), str(foto["field"]))
+                        else:
+                            content, filename, _ = _provider_download(foto["id"])
                         st.image(content, caption=filename, use_container_width=True)
                     except Exception as exc:
                         st.warning(f"No se pudo cargar foto: {exc}")
