@@ -307,7 +307,7 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
     
     if all_product_ids:
         # Intentar obtener del caché
-        cache_key = f"products_mp:{hash(tuple(sorted(all_product_ids)))}"
+        cache_key = f"products_mp_v2:{hash(tuple(sorted(all_product_ids)))}"
         cached = cache.get(cache_key)
         
         # VALIDACIÓN CRÍTICA: Verificar que el caché devuelve un diccionario
@@ -333,14 +333,35 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
                     tmpl_id = tmpl[0] if isinstance(tmpl, (list, tuple)) else tmpl
                     template_ids.add(tmpl_id)
             
-            # Obtener templates con campo de manejo y tipo de fruta
+            # Obtener templates con campo de manejo, tipo de fruta y variedad
             template_map = {}
             if template_ids:
+                variedad_field = _resolve_variedad_field(client)
+                template_fields = ["id", "name", "default_code", "x_studio_categora_tipo_de_manejo", "x_studio_sub_categora"]
+                if variedad_field:
+                    template_fields.append(variedad_field)
+
                 templates = client.read(
                     "product.template", 
                     list(template_ids), 
-                    ["id", "name", "default_code", "x_studio_categora_tipo_de_manejo", "x_studio_sub_categora"]
+                    template_fields
                 )
+
+                variedad_ids = set()
+                if variedad_field:
+                    for t in templates:
+                        raw_variedad = t.get(variedad_field)
+                        if isinstance(raw_variedad, list) and raw_variedad and all(isinstance(v, int) for v in raw_variedad):
+                            variedad_ids.update(raw_variedad)
+
+                variedad_map: Dict[int, str] = {}
+                if variedad_ids:
+                    try:
+                        for v in client.read("x_variedad", list(variedad_ids), ["id", "display_name"]):
+                            variedad_map[v["id"]] = v.get("display_name", "")
+                    except Exception as e:
+                        print(f"[WARNING] No se pudo leer x_variedad en get_recepciones_mp: {e}")
+
                 for t in templates:
                     manejo = t.get("x_studio_categora_tipo_de_manejo", "")
                     # Si es tupla/lista (selection), tomar el valor legible
@@ -356,7 +377,8 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
                         "name": t.get("name", ""),
                         "default_code": t.get("default_code", "") or "",
                         "manejo": manejo or "",
-                        "tipo_fruta": tipo_fruta_prod or ""
+                        "tipo_fruta": tipo_fruta_prod or "",
+                        "variedad": _extract_variedad_text(t.get(variedad_field), variedad_map) if variedad_field else ""
                     }
 
             
@@ -374,7 +396,8 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
                     "name": tmpl_data.get("name", ""),
                     "default_code": tmpl_data.get("default_code", ""),
                     "manejo": tmpl_data.get("manejo", ""),
-                    "tipo_fruta": tmpl_data.get("tipo_fruta", "")
+                    "tipo_fruta": tmpl_data.get("tipo_fruta", ""),
+                    "variedad": tmpl_data.get("variedad", "")
                 }
             
             # VALIDACIÓN: Asegurar que product_info_map es un diccionario antes de cachear
@@ -641,7 +664,8 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
                     "UOM": uom_name,
                     "Categoria": categoria,
                     "Manejo": prod_info.get("manejo", ""),
-                    "TipoFruta": prod_info.get("tipo_fruta", "")
+                    "TipoFruta": prod_info.get("tipo_fruta", ""),
+                    "Variedad": prod_info.get("variedad", "")
                 })
         
         # Procesar datos de calidad

@@ -713,7 +713,7 @@ def render(username: str, password: str):
             st.caption("**Opciones:** Semana = rango seleccionado | Semana+Resumen = incluye semana anterior y acumulado mensual | Período = resumen del rango sin comparativos")
 
             # Filtros adicionales
-            col_f1, col_f2, col_f3 = st.columns(3)
+            col_f1, col_f2, col_f3, col_f4 = st.columns(4)
             with col_f1:
                 tipos_fruta = df['tipo_fruta'].dropna().unique().tolist()
                 tipos_fruta = sorted([t for t in tipos_fruta if t])
@@ -733,6 +733,17 @@ def render(username: str, password: str):
                                 manejos_set.add(manejo)
                 manejos = sorted(list(manejos_set))
                 manejo_filtro = st.multiselect("Filtrar por Manejo", manejos, key="manejo_filtro")
+            with col_f4:
+                variedades_set = set()
+                for _, row in df.iterrows():
+                    if 'productos' in row and isinstance(row['productos'], list):
+                        for p in row['productos']:
+                            variedad = (p.get('Variedad') or p.get('variedad') or '').strip()
+                            if variedad:
+                                for part in [v.strip() for v in str(variedad).split(',') if v and v.strip()]:
+                                    variedades_set.add(part)
+                variedades = sorted(list(variedades_set))
+                variedad_filtro = st.multiselect("Filtrar por Variedad", variedades, key="variedad_filtro")
 
             productor_filtro = None
             productores = df['productor'].dropna().unique().tolist()
@@ -760,6 +771,50 @@ def render(username: str, password: str):
                     return False
                 df_filtrada = df_filtrada[df_filtrada.apply(tiene_manejo, axis=1)]
 
+            # Filtrar por Variedad (si algún producto de la recepción contiene alguna variedad seleccionada)
+            if variedad_filtro:
+                def tiene_variedad(row):
+                    if 'productos' in row and isinstance(row['productos'], list):
+                        for p in row['productos']:
+                            variedad = str((p.get('Variedad') or p.get('variedad') or '')).strip()
+                            if variedad and any(v in variedad for v in variedad_filtro):
+                                return True
+                    return False
+                df_filtrada = df_filtrada[df_filtrada.apply(tiene_variedad, axis=1)]
+
+            # Resumen de kg por manejo + variedad
+            st.subheader("📊 Kg por Manejo y Variedad")
+            rows_mv = []
+            for _, row in df_filtrada.iterrows():
+                prods = row.get('productos', []) or []
+                if not isinstance(prods, list):
+                    continue
+                for p in prods:
+                    categoria = (p.get('Categoria') or '').strip().upper()
+                    if 'BANDEJ' in categoria:
+                        continue
+                    kg = p.get('Kg Hechos', 0) or 0
+                    if kg <= 0:
+                        continue
+                    rows_mv.append({
+                        'Tipo Fruta': (p.get('TipoFruta') or row.get('tipo_fruta') or 'N/A').strip() or 'N/A',
+                        'Manejo': (p.get('Manejo') or 'N/A').strip() or 'N/A',
+                        'Variedad': (p.get('Variedad') or p.get('variedad') or 'Sin Variedad').strip() or 'Sin Variedad',
+                        'Kg': kg,
+                    })
+
+            if rows_mv:
+                df_mv = pd.DataFrame(rows_mv)
+                df_mv = (
+                    df_mv.groupby(['Tipo Fruta', 'Manejo', 'Variedad'], as_index=False)['Kg']
+                    .sum()
+                    .sort_values(['Kg', 'Tipo Fruta', 'Manejo', 'Variedad'], ascending=[False, True, True, True])
+                )
+                df_mv['Kg'] = df_mv['Kg'].apply(lambda x: fmt_numero(x, 2))
+                st.dataframe(df_mv, use_container_width=True, hide_index=True)
+            else:
+                st.info("No hay datos para mostrar en el resumen de manejo y variedad con los filtros actuales.")
+
             # Tabla de recepciones (filtrar recepciones sin tipo de fruta)
             st.subheader("📋 Detalle de Recepciones")
             df_filtrada = df_filtrada[df_filtrada['tipo_fruta'].notna() & (df_filtrada['tipo_fruta'] != '')]
@@ -778,17 +833,29 @@ def render(username: str, password: str):
             df_filtrada['bandejas'] = bandejas_vals
             df_filtrada['tiene_calidad'] = df_filtrada['calific_final'].notna() & (df_filtrada['calific_final'] != '')
 
+            variedades_vals = []
+            for _, row in df_filtrada.iterrows():
+                variedades_row = set()
+                prods = row.get('productos', []) or []
+                if isinstance(prods, list):
+                    for p in prods:
+                        var_raw = (p.get('Variedad') or p.get('variedad') or '').strip()
+                        if var_raw:
+                            variedades_row.add(var_raw)
+                variedades_vals.append(', '.join(sorted(variedades_row)) if variedades_row else 'Sin Variedad')
+            df_filtrada['variedades'] = variedades_vals
+
             # Verificar si existe columna 'origen' (datos antiguos pueden no tenerla)
             if 'origen' not in df_filtrada.columns:
                 df_filtrada['origen'] = 'RFP'  # Default para datos antiguos
 
             cols_mostrar = [
-                "albaran", "fecha", "productor", "tipo_fruta", "origen", "guia_despacho",
+                "albaran", "fecha", "productor", "tipo_fruta", "variedades", "origen", "guia_despacho",
                 "bandejas", "kg_recepcionados", "calific_final", "total_iqf", "total_block", "tiene_calidad"
             ]
             df_mostrar = df_filtrada[cols_mostrar].copy()
             df_mostrar.columns = [
-                "Albarán", "Fecha", "Productor", "Tipo Fruta", "Origen", "Guía Despacho",
+                "Albarán", "Fecha", "Productor", "Tipo Fruta", "Variedades", "Origen", "Guía Despacho",
                 "Bandejas", "Kg Recepcionados", "Clasificación", "% IQF", "% Block", "Calidad"
             ]
             # Convertir a numérico y formatear (NO restar bandejas, el servicio ya excluye bandejas del kg_total)
