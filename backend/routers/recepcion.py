@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional, List
 
-from backend.services.recepcion_service import get_recepciones_mp, validar_recepciones, get_recepciones_pallets
+from backend.services.recepcion_service import get_recepciones_mp, validar_recepciones, get_recepciones_pallets, get_ocs_mp_sin_factura, get_recepciones_mp_facturacion
 from backend.services.recepciones_gestion_service import RecepcionesGestionService
 from backend.services.report_service import generate_recepcion_report_pdf
 from backend.services.excel_service import generate_recepciones_excel
@@ -351,6 +351,42 @@ async def validate_recepciones(
     """
     try:
         return validar_recepciones(username, password, picking_ids)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get('/ocs-sin-factura')
+async def get_ocs_sin_factura(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
+    fecha_inicio: str = Query(..., description="Fecha inicio (YYYY-MM-DD)"),
+    fecha_fin: str = Query(..., description="Fecha fin (YYYY-MM-DD)"),
+    solo_hechas: bool = Query(True, description="Si es True, solo considera recepciones en estado done"),
+    origen: Optional[List[str]] = Query(None, description="Orígenes a filtrar: RFP, VILKUN, SAN JOSE"),
+):
+    """
+    Lista recepciones MP cuya OC asociada no tiene factura vinculada.
+    """
+    try:
+        return get_ocs_mp_sin_factura(username, password, fecha_inicio, fecha_fin, solo_hechas, origen)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get('/recepciones-facturacion')
+async def get_recepciones_facturacion(
+    username: str = Query(..., description="Usuario Odoo"),
+    password: str = Query(..., description="API Key Odoo"),
+    fecha_inicio: str = Query(..., description="Fecha inicio (YYYY-MM-DD)"),
+    fecha_fin: str = Query(..., description="Fecha fin (YYYY-MM-DD)"),
+    origen: Optional[List[str]] = Query(None, description="Orígenes a filtrar: RFP, VILKUN, SAN JOSE"),
+):
+    """
+    Lista todas las recepciones MP hechas con estado de facturacion/pago de la OC,
+    excluyendo devoluciones.
+    """
+    try:
+        return get_recepciones_mp_facturacion(username, password, fecha_inicio, fecha_fin, origen)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

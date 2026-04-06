@@ -170,6 +170,49 @@ def fetch_pallets_data(_username, _password, fecha_inicio, fecha_fin, manejo=Non
     return None
 
 
+@st.cache_data(ttl=120, show_spinner=False)
+def fetch_ocs_mp_sin_factura(_username, _password, fecha_inicio, fecha_fin, solo_hechas=True, origen=None):
+    """Obtiene OCs de MP sin factura asociada (en base a recepciones)."""
+    params = {
+        "username": _username,
+        "password": _password,
+        "fecha_inicio": fecha_inicio,
+        "fecha_fin": fecha_fin,
+        "solo_hechas": solo_hechas,
+    }
+    if origen:
+        params["origen"] = origen
+
+    try:
+        resp = requests.get(f"{API_URL}/api/v1/recepciones-mp/ocs-sin-factura", params=params, timeout=120)
+        if resp.status_code == 200:
+            return resp.json()
+    except Exception as e:
+        print(f"Error fetching ocs sin factura: {e}")
+    return None
+
+
+@st.cache_data(ttl=120, show_spinner=False)
+def fetch_recepciones_mp_facturacion(_username, _password, fecha_inicio, fecha_fin, origen=None):
+    """Obtiene todas las recepciones MP hechas con estado de pago/facturacion."""
+    params = {
+        "username": _username,
+        "password": _password,
+        "fecha_inicio": fecha_inicio,
+        "fecha_fin": fecha_fin,
+    }
+    if origen:
+        params["origen"] = origen
+
+    try:
+        resp = requests.get(f"{API_URL}/api/v1/recepciones-mp/recepciones-facturacion", params=params, timeout=180)
+        if resp.status_code == 200:
+            return resp.json()
+    except Exception as e:
+        print(f"Error fetching recepciones facturacion: {e}")
+    return None
+
+
 def fetch_pallets_excel(username, password, fecha_inicio, fecha_fin, manejo=None, tipo_fruta=None, origen=None, variedad=None):
     """Obtiene el archivo Excel de detalle de pallets."""
     params = {

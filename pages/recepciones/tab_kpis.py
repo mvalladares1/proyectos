@@ -815,6 +815,125 @@ def render(username: str, password: str):
             else:
                 st.info("No hay datos para mostrar en el resumen de manejo y variedad con los filtros actuales.")
 
+            # Recepciones MP con estado de pago (desde 2025-11-01 a hoy)
+            st.markdown("---")
+            st.subheader("📄 Recepciones MP: pagadas y no pagadas")
+            fecha_inicio_fact = "2025-11-01"
+            fecha_fin_fact = datetime.now().strftime("%Y-%m-%d")
+            recepciones_fact = shared.fetch_recepciones_mp_facturacion(
+                username,
+                password,
+                fecha_inicio_fact,
+                fecha_fin_fact,
+                st.session_state.get('origen_filtro_usado', []),
+            )
+
+            if recepciones_fact:
+                df_oc = pd.DataFrame(recepciones_fact)
+
+                # Reusar filtros activos de productor cuando aplique
+                if productor_filtro and 'productor' in df_oc.columns:
+                    df_oc = df_oc[df_oc['productor'].isin(productor_filtro)]
+
+                col_oc1, col_oc2, col_oc3 = st.columns([2, 1, 1])
+                with col_oc1:
+                    txt_oc = st.text_input("Buscar por OC, guía o albarán", key="oc_sin_factura_buscar")
+                with col_oc2:
+                    origenes_oc = ['Todos'] + sorted(df_oc['origen'].dropna().unique().tolist()) if 'origen' in df_oc.columns else ['Todos']
+                    filtro_origen_oc = st.selectbox("Origen", origenes_oc, key="oc_sin_factura_origen")
+                with col_oc3:
+                    filtro_pago_oc = st.selectbox("Estado de pago", ['Todos', 'Pagadas', 'No pagadas'], key="oc_sin_factura_pago")
+
+                if txt_oc:
+                    txt = txt_oc.strip().lower()
+                    df_oc = df_oc[
+                        df_oc.apply(
+                            lambda r: txt in str(r.get('oc_name', '')).lower()
+                            or txt in str(r.get('guia_despacho', '')).lower()
+                            or txt in str(r.get('albaran', '')).lower(),
+                            axis=1,
+                        )
+                    ]
+
+                if filtro_origen_oc != 'Todos' and 'origen' in df_oc.columns:
+                    df_oc = df_oc[df_oc['origen'] == filtro_origen_oc]
+
+                if filtro_pago_oc == 'Pagadas' and 'es_pagada' in df_oc.columns:
+                    df_oc = df_oc[df_oc['es_pagada'] == True]
+                elif filtro_pago_oc == 'No pagadas' and 'es_pagada' in df_oc.columns:
+                    df_oc = df_oc[df_oc['es_pagada'] != True]
+
+                if not df_oc.empty:
+                    df_oc_xlsx = df_oc.copy()
+
+                    # Ordenar por fecha desc y columnas clave para dejar un reporte consistente.
+                    if 'fecha' in df_oc_xlsx.columns:
+                        df_oc_xlsx['_fecha_sort'] = pd.to_datetime(df_oc_xlsx['fecha'], errors='coerce')
+                    else:
+                        df_oc_xlsx['_fecha_sort'] = pd.NaT
+
+                    sort_cols = [c for c in ['_fecha_sort', 'origen', 'productor', 'oc_name', 'guia_despacho', 'albaran'] if c in df_oc_xlsx.columns]
+                    if sort_cols:
+                        ascending_flags = [False] + [True] * (len(sort_cols) - 1)
+                        df_oc_xlsx = df_oc_xlsx.sort_values(sort_cols, ascending=ascending_flags)
+
+                    if 'fecha' in df_oc_xlsx.columns:
+                        df_oc_xlsx['fecha'] = df_oc_xlsx['fecha'].apply(fmt_fecha)
+
+                    cols = [
+                        'fecha',
+                        'origen',
+                        'productor',
+                        'guia_despacho',
+                        'albaran',
+                        'oc_name',
+                        'oc_state',
+                        'estado_facturacion',
+                        'estado_pago',
+                        'invoice_count',
+                        'facturas',
+                        'oc_url',
+                    ]
+                    cols = [c for c in cols if c in df_oc_xlsx.columns]
+                    df_oc_xlsx = df_oc_xlsx[cols]
+                    df_oc_xlsx = df_oc_xlsx.rename(columns={
+                        'fecha': 'Fecha',
+                        'origen': 'Origen',
+                        'productor': 'Productor',
+                        'guia_despacho': 'Guía',
+                        'albaran': 'Albarán',
+                        'oc_name': 'OC',
+                        'oc_state': 'Estado OC',
+                        'estado_facturacion': 'Estado Facturación',
+                        'estado_pago': 'Estado Pago',
+                        'invoice_count': 'N° Facturas',
+                        'facturas': 'Facturas',
+                        'oc_url': 'Link OC',
+                    })
+
+                    st.caption(
+                        f"{len(df_oc_xlsx)} recepciones (rango fijo {fecha_inicio_fact} a {fecha_fin_fact}) "
+                        f"| Pagadas: {(df_oc_xlsx['Estado Pago'] == 'Pagada').sum() if 'Estado Pago' in df_oc_xlsx.columns else 0} "
+                        f"| No pagadas: {(df_oc_xlsx['Estado Pago'] == 'No pagada').sum() if 'Estado Pago' in df_oc_xlsx.columns else 0}"
+                    )
+
+                    excel_buffer_oc = io.BytesIO()
+                    with pd.ExcelWriter(excel_buffer_oc, engine='openpyxl') as writer:
+                        df_oc_xlsx.to_excel(writer, sheet_name='Recepciones MP Facturación', index=False)
+                    excel_buffer_oc.seek(0)
+
+                    st.download_button(
+                        "📥 Descargar Recepciones MP (Excel)",
+                        excel_buffer_oc,
+                        file_name=f"recepciones_mp_facturacion_{fecha_inicio_fact}_a_{fecha_fin_fact}.xlsx",
+                        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                        key='download_oc_sin_factura_xlsx',
+                    )
+                else:
+                    st.info("No hay recepciones MP con los filtros aplicados.")
+            else:
+                st.info("No se encontraron recepciones MP para el rango solicitado.")
+
             # Tabla de recepciones (filtrar recepciones sin tipo de fruta)
             st.subheader("📋 Detalle de Recepciones")
             df_filtrada = df_filtrada[df_filtrada['tipo_fruta'].notna() & (df_filtrada['tipo_fruta'] != '')]

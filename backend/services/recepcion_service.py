@@ -915,6 +915,304 @@ def validar_recepciones(username: str, password: str, picking_ids: List[int]) ->
         "n_error": len(error_ids)
     }
 
+
+def get_ocs_mp_sin_factura(
+    username: str,
+    password: str,
+    fecha_inicio: str,
+    fecha_fin: str,
+    solo_hechas: bool = True,
+    origen: Optional[List[str]] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Retorna recepciones MP cuya OC asociada no tiene facturas vinculadas.
+    """
+    client = OdooClient(username=username, password=password)
+
+    picking_type_ids = [1, 217, 164]
+    domain = [
+        ("picking_type_id", "in", picking_type_ids),
+        ("x_studio_categora_de_producto", "=", "MP"),
+        "|",
+        ("date_done", ">=", fecha_inicio),
+        ("scheduled_date", ">=", fecha_inicio),
+        "|",
+        ("date_done", "<=", fecha_fin + " 23:59:59"),
+        ("scheduled_date", "<=", fecha_fin + " 23:59:59"),
+    ]
+
+    if solo_hechas:
+        domain.append(("state", "=", "done"))
+    else:
+        domain.append(("state", "!=", "cancel"))
+
+    pickings = client.search_read(
+        "stock.picking",
+        domain,
+        [
+            "id",
+            "name",
+            "scheduled_date",
+            "date_done",
+            "partner_id",
+            "x_studio_gua_de_despacho",
+            "origin",
+            "picking_type_id",
+        ],
+        limit=5000,
+    )
+
+    if not pickings:
+        return []
+
+    override_map = get_override_origen_picking()
+    origenes = set(origen or [])
+
+    filtered_pickings: List[Dict[str, Any]] = []
+    oc_names = set()
+
+    for p in pickings:
+        albaran = p.get("name", "")
+        picking_type = p.get("picking_type_id")
+        picking_type_id_val = picking_type[0] if isinstance(picking_type, (list, tuple)) else picking_type
+        origen_rec = (
+            override_map.get(albaran)
+            or ("RFP" if picking_type_id_val == 1 else "VILKUN" if picking_type_id_val == 217 else "SAN JOSE" if picking_type_id_val == 164 else "OTRO")
+        )
+
+        if origenes and origen_rec not in origenes:
+            continue
+
+        oc_name = (p.get("origin") or "").strip()
+        if not oc_name:
+            continue
+
+        p["origen"] = origen_rec
+        filtered_pickings.append(p)
+        oc_names.add(oc_name)
+
+    if not filtered_pickings or not oc_names:
+        return []
+
+    ocs = client.search_read(
+        "purchase.order",
+        [("name", "in", list(oc_names))],
+        ["id", "name", "state", "invoice_ids", "partner_id"],
+        limit=5000,
+    )
+    oc_map = {oc["name"]: oc for oc in ocs}
+
+    resultado = []
+    for p in filtered_pickings:
+        oc_name = (p.get("origin") or "").strip()
+        oc = oc_map.get(oc_name)
+        if not oc:
+            continue
+
+        invoice_ids = oc.get("invoice_ids") or []
+        if invoice_ids:
+            continue
+
+        partner = p.get("partner_id")
+        productor = partner[1] if isinstance(partner, (list, tuple)) and len(partner) > 1 else ""
+        fecha = p.get("date_done") or p.get("scheduled_date") or ""
+
+        resultado.append(
+            {
+                "picking_id": p.get("id"),
+                "albaran": p.get("name", ""),
+                "fecha": fecha,
+                "origen": p.get("origen", ""),
+                "productor": productor,
+                "guia_despacho": p.get("x_studio_gua_de_despacho", ""),
+                "oc_name": oc_name,
+                "oc_state": oc.get("state", ""),
+                "invoice_count": 0,
+                "oc_url": f"https://riofuturo.server98c6e.oerpondemand.net/web#id={oc.get('id')}&model=purchase.order&view_type=form",
+            }
+        )
+
+    resultado.sort(key=lambda x: (x.get("fecha") or ""), reverse=True)
+    return resultado
+
+
+def get_recepciones_mp_facturacion(
+    username: str,
+    password: str,
+    fecha_inicio: str,
+    fecha_fin: str,
+    origen: Optional[List[str]] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Retorna TODAS las recepciones MP hechas, excluyendo canceladas y devoluciones,
+    con estado de facturacion/pago de la OC asociada.
+    """
+    client = OdooClient(username=username, password=password)
+
+    picking_type_ids = [1, 217, 164]
+    picking_types_devolucion = [2, 5, 3]
+
+    # 1) Buscar devoluciones para excluir recepciones que fueron devueltas.
+    devoluciones = client.search_read(
+        "stock.picking",
+        [
+            ("picking_type_id", "in", picking_types_devolucion),
+            ("scheduled_date", ">=", fecha_inicio),
+            ("scheduled_date", "<=", fecha_fin + " 23:59:59"),
+        ],
+        ["origin", "name"],
+        limit=10000,
+    )
+    recepciones_con_devolucion = set()
+    for dev in devoluciones or []:
+        origin = (dev.get("origin") or "").strip()
+        if origin:
+            recepciones_con_devolucion.add(origin)
+
+    # 2) Buscar recepciones MP hechas.
+    pickings = client.search_read(
+        "stock.picking",
+        [
+            ("picking_type_id", "in", picking_type_ids),
+            ("x_studio_categora_de_producto", "=", "MP"),
+            ("state", "=", "done"),
+            "|",
+            ("date_done", ">=", fecha_inicio),
+            ("scheduled_date", ">=", fecha_inicio),
+            "|",
+            ("date_done", "<=", fecha_fin + " 23:59:59"),
+            ("scheduled_date", "<=", fecha_fin + " 23:59:59"),
+        ],
+        [
+            "id",
+            "name",
+            "scheduled_date",
+            "date_done",
+            "partner_id",
+            "x_studio_gua_de_despacho",
+            "origin",
+            "picking_type_id",
+            "state",
+        ],
+        limit=10000,
+    )
+
+    if not pickings:
+        return []
+
+    override_map = get_override_origen_picking()
+    origenes = set(origen or [])
+
+    filtered_pickings: List[Dict[str, Any]] = []
+    oc_names = set()
+    for p in pickings:
+        albaran = p.get("name", "")
+        if albaran in recepciones_con_devolucion:
+            continue
+
+        picking_type = p.get("picking_type_id")
+        picking_type_id_val = picking_type[0] if isinstance(picking_type, (list, tuple)) else picking_type
+        origen_rec = (
+            override_map.get(albaran)
+            or ("RFP" if picking_type_id_val == 1 else "VILKUN" if picking_type_id_val == 217 else "SAN JOSE" if picking_type_id_val == 164 else "OTRO")
+        )
+
+        if origenes and origen_rec not in origenes:
+            continue
+
+        p["origen"] = origen_rec
+        filtered_pickings.append(p)
+
+        oc_name = (p.get("origin") or "").strip()
+        if oc_name:
+            oc_names.add(oc_name)
+
+    if not filtered_pickings:
+        return []
+
+    # 3) Traer OCs e invoices asociadas.
+    oc_map: Dict[str, Dict[str, Any]] = {}
+    invoice_ids_all = set()
+    if oc_names:
+        ocs = client.search_read(
+            "purchase.order",
+            [("name", "in", list(oc_names))],
+            ["id", "name", "state", "invoice_ids", "partner_id"],
+            limit=10000,
+        )
+        for oc in ocs:
+            oc_map[oc["name"]] = oc
+            for inv_id in (oc.get("invoice_ids") or []):
+                invoice_ids_all.add(inv_id)
+
+    invoice_map: Dict[int, Dict[str, Any]] = {}
+    if invoice_ids_all:
+        invoices = client.search_read(
+            "account.move",
+            [("id", "in", list(invoice_ids_all))],
+            ["id", "name", "state", "payment_state", "move_type", "amount_total", "amount_residual"],
+            limit=10000,
+        )
+        invoice_map = {inv["id"]: inv for inv in invoices}
+
+    resultado = []
+    for p in filtered_pickings:
+        oc_name = (p.get("origin") or "").strip()
+        oc = oc_map.get(oc_name)
+        invoice_ids = (oc or {}).get("invoice_ids") or []
+
+        invoice_names = []
+        payment_states = []
+        for inv_id in invoice_ids:
+            inv = invoice_map.get(inv_id)
+            if not inv:
+                continue
+            if inv.get("move_type") not in ("in_invoice", "in_refund"):
+                continue
+            invoice_names.append(inv.get("name") or str(inv_id))
+            payment_states.append((inv.get("payment_state") or "").lower())
+
+        if not payment_states:
+            estado_facturacion = "No facturada"
+            estado_pago = "No pagada"
+            es_pagada = False
+        else:
+            estado_facturacion = "Facturada"
+            paid_states = {"paid", "in_payment"}
+            es_pagada = all(st in paid_states for st in payment_states)
+            estado_pago = "Pagada" if es_pagada else "No pagada"
+
+        partner = p.get("partner_id")
+        productor = partner[1] if isinstance(partner, (list, tuple)) and len(partner) > 1 else ""
+        fecha = p.get("date_done") or p.get("scheduled_date") or ""
+
+        oc_id = (oc or {}).get("id")
+        oc_url = ""
+        if oc_id:
+            oc_url = f"https://riofuturo.server98c6e.oerpondemand.net/web#id={oc_id}&model=purchase.order&view_type=form"
+
+        resultado.append(
+            {
+                "picking_id": p.get("id"),
+                "albaran": p.get("name", ""),
+                "fecha": fecha,
+                "origen": p.get("origen", ""),
+                "productor": productor,
+                "guia_despacho": p.get("x_studio_gua_de_despacho", ""),
+                "oc_name": oc_name,
+                "oc_state": (oc or {}).get("state", ""),
+                "estado_facturacion": estado_facturacion,
+                "estado_pago": estado_pago,
+                "es_pagada": es_pagada,
+                "invoice_count": len(invoice_names),
+                "facturas": ", ".join(invoice_names),
+                "oc_url": oc_url,
+            }
+        )
+
+    resultado.sort(key=lambda x: (x.get("fecha") or ""), reverse=True)
+    return resultado
+
 def get_recepciones_pallets(username: str, password: str, fecha_inicio: str, fecha_fin: str, 
                              manejo_filtros: Optional[List[str]] = None, 
                              tipo_fruta_filtros: Optional[List[str]] = None,
