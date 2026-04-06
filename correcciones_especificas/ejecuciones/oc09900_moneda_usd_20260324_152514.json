@@ -1,0 +1,71 @@
+{
+  "fecha_ejecucion": "2026-03-24T15:25:09.930433",
+  "oc": "OC09900",
+  "oc_id": 9908,
+  "objetivo": {
+    "currency_id": 2,
+    "price_unit": 1.6
+  },
+  "cambios": [
+    {
+      "tipo": "purchase.order",
+      "id": 9908,
+      "campo": "currency_id",
+      "antes": [
+        45,
+        "CLP"
+      ],
+      "despues": [
+        2,
+        "USD"
+      ]
+    },
+    {
+      "tipo": "stock.valuation.layer",
+      "id": 82191,
+      "antes": {
+        "currency_id": [
+          45,
+          "CLP"
+        ],
+        "unit_cost": 2.0,
+        "value": 6515.0,
+        "remaining_value": 0.0
+      },
+      "despues": {
+        "currency_id": 2,
+        "unit_cost": 1.6,
+        "value": 6515.200000000001
+      }
+    }
+  ],
+  "errores": [],
+  "verificacion_final": {
+    "purchase.order": {
+      "id": 9908,
+      "currency_id": [
+        2,
+        "USD"
+      ],
+      "amount_total": 8225.0
+    },
+    "purchase.order.line": {
+      "id": 16374,
+      "currency_id": [
+        2,
+        "USD"
+      ],
+      "price_unit": 1.6,
+      "price_subtotal": 6912.0
+    },
+    "stock.valuation.layer": {
+      "id": 82191,
+      "currency_id": [
+        45,
+        "CLP"
+      ],
+      "unit_cost": 1.6,
+      "value": 6515.2
+    }
+  }
+}

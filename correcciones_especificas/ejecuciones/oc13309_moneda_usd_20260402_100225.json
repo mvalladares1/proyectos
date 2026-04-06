@@ -1,0 +1,115 @@
+{
+  "fecha_ejecucion": "2026-04-02T10:02:21.306972",
+  "oc": "OC13309",
+  "currency_id_destino": 2,
+  "currency_note": {
+    "currency_id": {
+      "readonly": true,
+      "store": false
+    }
+  },
+  "cambios": [
+    {
+      "tipo": "purchase.order",
+      "id": 13319,
+      "antes": {
+        "id": 13319,
+        "currency_id": [
+          45,
+          "CLP"
+        ],
+        "amount_total": 11.0
+      },
+      "despues": {
+        "currency_id": [
+          2,
+          "USD"
+        ]
+      }
+    },
+    {
+      "tipo": "stock.move",
+      "id": 171643,
+      "antes": {
+        "id": 171643,
+        "price_unit": 1.415,
+        "quantity_done": 6.36,
+        "state": "done",
+        "product_id": [
+          16073,
+          "[101122000] AR HB Conv. IQF en Bandeja"
+        ]
+      },
+      "despues": {
+        "price_unit": 1.4
+      }
+    },
+    {
+      "tipo": "stock.valuation.layer",
+      "id": 103777,
+      "antes": {
+        "id": 103777,
+        "quantity": 6.36,
+        "unit_cost": 1.0,
+        "value": 9.0,
+        "remaining_qty": 6.36,
+        "remaining_value": 9.0,
+        "currency_id": [
+          45,
+          "CLP"
+        ]
+      },
+      "despues": {
+        "unit_cost": 1.4,
+        "value": 8.904,
+        "remaining_value": 8.904
+      }
+    },
+    {
+      "tipo": "verificacion_final",
+      "data": {
+        "purchase.order": {
+          "id": 13319,
+          "name": "OC13309",
+          "currency_id": [
+            2,
+            "USD"
+          ],
+          "amount_total": 11.0
+        },
+        "purchase.order.line": {
+          "id": 21948,
+          "currency_id": [
+            2,
+            "USD"
+          ],
+          "price_unit": 1.4,
+          "price_subtotal": 9.0,
+          "product_qty": 6.36
+        },
+        "stock.moves": [
+          {
+            "id": 171643,
+            "price_unit": 1.4,
+            "quantity_done": 6.36,
+            "state": "done"
+          }
+        ],
+        "stock.valuation.layers": [
+          {
+            "id": 103777,
+            "currency_id": [
+              45,
+              "CLP"
+            ],
+            "unit_cost": 1.0,
+            "value": 9.0,
+            "remaining_qty": 6.36,
+            "remaining_value": 9.0
+          }
+        ]
+      }
+    }
+  ],
+  "errores": []
+}
