@@ -9,7 +9,7 @@ import altair as alt
 import io
 import os
 from datetime import datetime, timedelta
-from .shared import fmt_numero, fmt_dinero, fmt_fecha, API_URL
+from .shared import fmt_numero, fmt_dinero, fmt_fecha, API_URL, fetch_recepciones_mp_facturacion
 
 
 @st.fragment
@@ -820,7 +820,7 @@ def render(username: str, password: str):
             st.subheader("📄 Recepciones MP: pagadas y no pagadas")
             fecha_inicio_fact = "2025-11-01"
             fecha_fin_fact = datetime.now().strftime("%Y-%m-%d")
-            recepciones_fact = shared.fetch_recepciones_mp_facturacion(
+            recepciones_fact = fetch_recepciones_mp_facturacion(
                 username,
                 password,
                 fecha_inicio_fact,
