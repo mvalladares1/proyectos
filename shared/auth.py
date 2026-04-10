@@ -19,7 +19,8 @@ else:
 TOKEN_KEY = "session_token"
 
 # Bloqueo temporal de la central de dashboards
-CENTRAL_DASHBOARDS_DISABLED = True
+# Se mantiene activo solo en produccion para no bloquear el entorno dev.
+CENTRAL_DASHBOARDS_DISABLED = ENV == "production"
 CENTRAL_DASHBOARDS_DISABLED_TITLE = "¡CENTRAL DE DASHBOARDS ESTA DADA DE BAJA HASTA NUEVO AVISO!"
 CENTRAL_DASHBOARDS_DISABLED_MESSAGE = (
     "Por decisiones de la empresa, como departamento de informática ya no es prioridad seguir "
