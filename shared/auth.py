@@ -18,6 +18,15 @@ else:
 # Clave para el token en session_state y cookies
 TOKEN_KEY = "session_token"
 
+# Bloqueo temporal de la central de dashboards
+CENTRAL_DASHBOARDS_DISABLED = True
+CENTRAL_DASHBOARDS_DISABLED_TITLE = "¡CENTRAL DE DASHBOARDS ESTA DADA DE BAJA HASTA NUEVO AVISO!"
+CENTRAL_DASHBOARDS_DISABLED_MESSAGE = (
+    "Por decisiones de la empresa, como departamento de informática ya no es prioridad seguir "
+    "manteniendo la central de dashboards activa hasta que sea un requerimiento de la empresa."
+)
+CENTRAL_DASHBOARDS_DISABLED_SIGNATURE = "Atte: Jefe de Sistemas"
+
 
 def _get_token_from_cookies() -> Optional[str]:
     """Obtiene el token de las cookies del navegador."""
@@ -239,6 +248,11 @@ def proteger_pagina():
     Si no hay autenticación, muestra mensaje y detiene.
     También muestra el banner de mantenimiento si está activo.
     """
+    if central_dashboards_dada_de_baja():
+        invalidar_sesion_por_bloqueo_central()
+        mostrar_bloqueo_central()
+        st.stop()
+
     if not verificar_autenticacion():
         mostrar_login_requerido()
         return False
@@ -463,6 +477,11 @@ def proteger_modulo(modulo_key: str) -> bool:
     Returns:
         True si el usuario tiene acceso, False si no (y detiene la página)
     """
+    if central_dashboards_dada_de_baja():
+        invalidar_sesion_por_bloqueo_central()
+        mostrar_bloqueo_central()
+        st.stop()
+
     # 1. Verificar autenticación
     if not verificar_autenticacion():
         mostrar_login_requerido()
@@ -518,6 +537,68 @@ def obtener_info_sesion() -> Optional[Dict[str, Any]]:
 
 
 # ============ BANNER DE MANTENIMIENTO ============
+
+def central_dashboards_dada_de_baja() -> bool:
+    """Indica si la central de dashboards está deshabilitada temporalmente."""
+    return CENTRAL_DASHBOARDS_DISABLED
+
+
+def invalidar_sesion_por_bloqueo_central():
+    """Limpia storage y sesión cuando la central está deshabilitada."""
+    try:
+        from shared.cookies import clear_session_multi_method
+        clear_session_multi_method()
+    except Exception:
+        pass
+
+    token = _get_stored_token()
+    if token or st.session_state:
+        cerrar_sesion()
+
+
+def mostrar_bloqueo_central():
+    """Renderiza el aviso institucional de baja de la central."""
+    st.markdown(
+        """
+        <style>
+            .central-shutdown-banner {
+                border: 2px solid #9f1239;
+                background: linear-gradient(135deg, #7f1d1d 0%, #3f0d12 100%);
+                color: #fff7ed;
+                border-radius: 16px;
+                padding: 1.5rem;
+                margin: 1rem 0 1.5rem 0;
+                box-shadow: 0 12px 30px rgba(127, 29, 29, 0.28);
+            }
+            .central-shutdown-banner h2 {
+                margin: 0 0 0.75rem 0;
+                font-size: 1.65rem;
+                line-height: 1.2;
+            }
+            .central-shutdown-banner p {
+                margin: 0;
+                font-size: 1rem;
+                line-height: 1.55;
+            }
+            .central-shutdown-banner .signature {
+                margin-top: 1rem;
+                font-weight: 700;
+                color: #fecaca;
+            }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        f"""
+        <div class="central-shutdown-banner">
+            <h2>{CENTRAL_DASHBOARDS_DISABLED_TITLE}</h2>
+            <p>{CENTRAL_DASHBOARDS_DISABLED_MESSAGE}</p>
+            <p class="signature">{CENTRAL_DASHBOARDS_DISABLED_SIGNATURE}</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 def obtener_estado_mantenimiento() -> Dict[str, Any]:
     """Obtiene el estado del banner de mantenimiento desde el backend."""

@@ -7,7 +7,7 @@ import os
 import httpx
 import streamlit as st
 
-from shared.auth import guardar_permisos_state
+from shared.auth import central_dashboards_dada_de_baja, guardar_permisos_state
 
 
 # Determinar API_URL basado en ENV
@@ -65,11 +65,13 @@ home_page = st.Page("Home_Content.py", title="Home", icon="🏠", default=True)
 
 # Asegurar permisos están cargados antes de verificar autenticación
 username = st.session_state.get('username', '')
-if username and not st.session_state.get('restricted_dashboards'):
+if not central_dashboards_dada_de_baja() and username and not st.session_state.get('restricted_dashboards'):
     ensure_permissions(username)
 
 # Solo mostrar las demás páginas si el usuario está autenticado
-if is_user_authenticated() and username:
+if central_dashboards_dada_de_baja():
+    nav = st.navigation([home_page])
+elif is_user_authenticated() and username:
     # Obtener información del usuario
     username = st.session_state.get('username', '')
     is_admin = st.session_state.get('is_admin', False)

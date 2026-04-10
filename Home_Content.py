@@ -5,7 +5,12 @@ import os
 import httpx
 import streamlit as st
 
-from shared.auth import guardar_permisos_state
+from shared.auth import (
+    central_dashboards_dada_de_baja,
+    guardar_permisos_state,
+    invalidar_sesion_por_bloqueo_central,
+    mostrar_bloqueo_central,
+)
 
 
 # Determinar API_URL basado en ENV
@@ -86,6 +91,11 @@ st.markdown("""
 
 # Header principal
 st.markdown('<p class="main-header">🏭 Rio Futuro Dashboards</p>', unsafe_allow_html=True)
+
+if central_dashboards_dada_de_baja():
+    invalidar_sesion_por_bloqueo_central()
+    mostrar_bloqueo_central()
+    st.stop()
 
 # === AUTENTICACIÓN ===
 from shared.auth import verificar_autenticacion, iniciar_sesion, cerrar_sesion, obtener_info_sesion
