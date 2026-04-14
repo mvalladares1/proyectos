@@ -51,6 +51,19 @@ def get_override_origen_picking() -> Dict[str, str]:
 OVERRIDE_ORIGEN_PICKING = _LEGACY_OVERRIDE_ORIGEN_PICKING
 
 
+RECEPCION_PICKING_TYPE_IDS = [1, 217, 164, 62]
+ORIGEN_BY_PICKING_TYPE_ID = {
+    1: "RFP",
+    217: "VILKUN",
+    164: "SAN JOSE",
+    62: "SAN JOSE",
+}
+
+
+def _get_origen_from_picking_type_id(picking_type_id: Optional[int]) -> str:
+    return ORIGEN_BY_PICKING_TYPE_ID.get(picking_type_id, "OTRO")
+
+
 def _normalize_categoria(cat: str) -> str:
     if not cat:
         return ''
@@ -99,7 +112,7 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
     Args:
         solo_hechas: Si es True (y no se especifica 'estados'), solo muestra recepciones en estado "done".
         estados: Lista explícita de estados a filtrar (ej. ['assigned', 'done']). Si se usa, ignora solo_hechas.
-        origen: Lista de orígenes a filtrar. Valores válidos: "RFP", "VILKUN".
+        origen: Lista de orígenes a filtrar. Valores válidos: "RFP", "VILKUN", "SAN JOSE".
                 Si es None o vacío, se incluyen ambos.
     """
     client = OdooClient(username=username, password=password)
@@ -139,7 +152,7 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
     # SIEMPRE traer todos los tipos de Odoo; el filtro de origen se aplica 100% en Python
     # (post-query). Esto garantiza que el resultado con filtro sea consistente con el resultado
     # sin filtro, sin depender de que todos los picking_type_ids estén mapeados correctamente.
-    picking_type_ids = [1, 217, 164]
+    picking_type_ids = RECEPCION_PICKING_TYPE_IDS
     
     
     # ============ PASO 0.5: Identificar devoluciones y calcular kg devueltos por recepción ============
@@ -562,7 +575,7 @@ def get_recepciones_mp(username: str, password: str, fecha_inicio: str, fecha_fi
         if albaran in override_map:
             origen_rec = override_map[albaran]
         else:
-            origen_rec = "RFP" if picking_type_id_val == 1 else "VILKUN" if picking_type_id_val == 217 else "SAN JOSE" if picking_type_id_val == 164 else "OTRO"
+            origen_rec = _get_origen_from_picking_type_id(picking_type_id_val)
         
         # Filtro post-query: si se pidió un origen específico, excluir recepciones que
         # después del override no coincidan con el filtro solicitado.
@@ -929,7 +942,7 @@ def get_ocs_mp_sin_factura(
     """
     client = OdooClient(username=username, password=password)
 
-    picking_type_ids = [1, 217, 164]
+    picking_type_ids = RECEPCION_PICKING_TYPE_IDS
     domain = [
         ("picking_type_id", "in", picking_type_ids),
         ("x_studio_categora_de_producto", "=", "MP"),
@@ -977,7 +990,7 @@ def get_ocs_mp_sin_factura(
         picking_type_id_val = picking_type[0] if isinstance(picking_type, (list, tuple)) else picking_type
         origen_rec = (
             override_map.get(albaran)
-            or ("RFP" if picking_type_id_val == 1 else "VILKUN" if picking_type_id_val == 217 else "SAN JOSE" if picking_type_id_val == 164 else "OTRO")
+            or _get_origen_from_picking_type_id(picking_type_id_val)
         )
 
         if origenes and origen_rec not in origenes:
@@ -1049,7 +1062,7 @@ def get_recepciones_mp_facturacion(
     """
     client = OdooClient(username=username, password=password)
 
-    picking_type_ids = [1, 217, 164]
+    picking_type_ids = RECEPCION_PICKING_TYPE_IDS
     picking_types_devolucion = [2, 5, 3]
 
     # 1) Buscar devoluciones para excluir recepciones que fueron devueltas.
@@ -1114,7 +1127,7 @@ def get_recepciones_mp_facturacion(
         picking_type_id_val = picking_type[0] if isinstance(picking_type, (list, tuple)) else picking_type
         origen_rec = (
             override_map.get(albaran)
-            or ("RFP" if picking_type_id_val == 1 else "VILKUN" if picking_type_id_val == 217 else "SAN JOSE" if picking_type_id_val == 164 else "OTRO")
+            or _get_origen_from_picking_type_id(picking_type_id_val)
         )
 
         if origenes and origen_rec not in origenes:
@@ -1224,7 +1237,7 @@ def get_recepciones_pallets(username: str, password: str, fecha_inicio: str, fec
     client = OdooClient(username=username, password=password)
     
     # SIEMPRE traer todos los tipos de Odoo; el filtro de origen se aplica 100% en Python
-    picking_type_ids = [1, 217, 164]
+    picking_type_ids = RECEPCION_PICKING_TYPE_IDS
 
     # 0. Identificar recepciones IN con devoluciones asociadas
     PICKING_TYPES_DEVOLUCION = [2, 5, 3]  # IDs de devoluciones/salidas a excluir
@@ -1376,7 +1389,7 @@ def get_recepciones_pallets(username: str, password: str, fecha_inicio: str, fec
         if albaran in override_map:
             origen_val = override_map[albaran]
         else:
-            origen_val = "RFP" if pt_id_val == 1 else "VILKUN" if pt_id_val == 217 else "SAN JOSE" if pt_id_val == 164 else "OTRO"
+            origen_val = _get_origen_from_picking_type_id(pt_id_val)
 
         # Filtro post-query: excluir recepciones que no coincidan con el origen solicitado
         if origen_filtros and len(origen_filtros) > 0 and origen_val not in origen_filtros:
@@ -1478,7 +1491,7 @@ def get_recepciones_pallets_detailed(username: str, password: str, fecha_inicio:
     # SIEMPRE traer todos los tipos de Odoo; el filtro de origen se aplica 100% en Python
     if isinstance(origen_filtros, str):
         origen_filtros = [origen_filtros]
-    picking_type_ids = [1, 217, 164]
+    picking_type_ids = RECEPCION_PICKING_TYPE_IDS
 
     # 0. Identificar recepciones IN con devoluciones asociadas
     PICKING_TYPES_DEVOLUCION = [2, 5, 3]  # IDs de devoluciones/salidas a excluir
@@ -1638,7 +1651,7 @@ def get_recepciones_pallets_detailed(username: str, password: str, fecha_inicio:
         if albaran in override_map:
             origen_val = override_map[albaran]
         else:
-            origen_val = "RFP" if pt_id_val == 1 else "VILKUN" if pt_id_val == 217 else "SAN JOSE" if pt_id_val == 164 else "OTRO"
+            origen_val = _get_origen_from_picking_type_id(pt_id_val)
         
         # Filtro post-query: excluir recepciones que no coincidan con el origen solicitado
         if origen_filtros and len(origen_filtros) > 0 and origen_val not in origen_filtros:
